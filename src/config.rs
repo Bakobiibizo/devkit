@@ -60,10 +60,7 @@ pub fn load_from_path(path: &Utf8Path) -> Result<DevConfig> {
 
 pub fn write_example_config(path: &Utf8Path, overwrite: bool) -> Result<()> {
     if path.exists() && !overwrite {
-        bail!(
-            "{} already exists; rerun with --force to overwrite",
-            path
-        );
+        bail!("{} already exists; rerun with --force to overwrite", path);
     }
 
     scaffold::write_template(path, "config/example.config.toml")

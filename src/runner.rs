@@ -1,4 +1,4 @@
-use std::io::BufRead;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command as ProcessCommand, Stdio};
 use std::thread;
@@ -22,6 +22,9 @@ pub fn run(cli: Cli) -> Result<()> {
 
     match cli.command {
         Command::Config { command } => handle_config_only(&ctx, command),
+        Command::Language {
+            command: LanguageCommand::Set { name },
+        } => handle_language_set(&ctx, name),
         other => {
             let state = AppState::new(ctx)?;
             handle_with_state(&state, other)
@@ -152,15 +155,7 @@ fn handle_install(state: &AppState, args: InstallArgs) -> Result<()> {
 
 fn handle_language(state: &AppState, command: LanguageCommand) -> Result<()> {
     match command {
-        LanguageCommand::Set { name } => {
-            config::set_default_language(&state.config_path, &name)?;
-            println!(
-                "Default language set to `{}` in {}",
-                name, state.config_path
-            );
-            println!("Reload config to apply for this session.");
-            Ok(())
-        }
+        LanguageCommand::Set { name } => handle_language_set(&state.ctx, name),
     }
 }
 
@@ -387,19 +382,17 @@ fn run_process_streaming(argv: &[String]) -> Result<std::process::ExitStatus> {
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
 
-    let stdout_handle = stdout.map(|mut pipe| {
+    let stdout_handle = stdout.map(|pipe| {
         thread::spawn(move || {
-            let reader = std::io::BufReader::new(&mut pipe);
-            for line in reader.lines().flatten() {
+            for line in BufReader::new(pipe).lines().flatten() {
                 println!("     stdout | {}", line);
             }
         })
     });
 
-    let stderr_handle = stderr.map(|mut pipe| {
+    let stderr_handle = stderr.map(|pipe| {
         thread::spawn(move || {
-            let reader = std::io::BufReader::new(&mut pipe);
-            for line in reader.lines().flatten() {
+            for line in BufReader::new(pipe).lines().flatten() {
                 println!("     stderr | {}", line);
             }
         })
@@ -529,4 +522,11 @@ impl AppState {
         let cwd = envfile::current_working_dir()?;
         envfile::locate(&cwd)
     }
+}
+fn handle_language_set(ctx: &CliContext, name: String) -> Result<()> {
+    let path = ctx.resolve_config_path()?;
+    config::set_default_language(&path, &name)?;
+    println!("Default language set to `{}` in {}", name, path);
+    println!("Reload config to apply for this session.");
+    Ok(())
 }
