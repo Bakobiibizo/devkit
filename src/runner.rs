@@ -10,6 +10,7 @@ use crate::cli::{
     VersionCommand,
 };
 use crate::config::DevConfig;
+use crate::envfile;
 use crate::tasks::{CommandSpec, TaskIndex};
 use crate::{config, gitops, scaffold, versioning};
 
@@ -151,21 +152,58 @@ fn handle_version(_state: &AppState, command: VersionCommand) -> Result<()> {
     versioning::handle(command)
 }
 
-fn handle_env(_state: &AppState, command: Option<EnvCommand>) -> Result<()> {
+fn handle_env(state: &AppState, command: Option<EnvCommand>) -> Result<()> {
     match command {
-        Some(EnvCommand::List) | None => {
-            println!("(todo) Display environment variables");
-            Ok(())
-        }
-        Some(EnvCommand::Add { key, value }) => {
-            println!("(todo) Add `{key}` to .env with value `{value}`");
-            Ok(())
-        }
-        Some(EnvCommand::Rm { key }) => {
-            println!("(todo) Remove `{key}` from .env");
-            Ok(())
-        }
+        Some(EnvCommand::List) | None => env_list(state),
+        Some(EnvCommand::Add { key, value }) => env_add(state, &key, &value),
+        Some(EnvCommand::Rm { key }) => env_remove(state, &key),
     }
+}
+
+fn env_list(state: &AppState) -> Result<()> {
+    let env_path = state.env_path()?;
+    let env = envfile::EnvFile::load(&env_path)?;
+    let mut entries: Vec<_> = env.entries().collect();
+    entries.sort_by(|a, b| a.0.cmp(b.0));
+
+    if entries.is_empty() {
+        println!("No environment variables defined in {}.", env_path);
+        return Ok(());
+    }
+
+    println!("Environment variables in {}:", env_path);
+    for (key, value) in entries {
+        let mask = if value.is_empty() { "" } else { "*****" };
+        println!("  {}={}", key, mask);
+    }
+    Ok(())
+}
+
+fn env_add(state: &AppState, key: &str, value: &str) -> Result<()> {
+    let env_path = state.env_path()?;
+    let mut env = envfile::EnvFile::load(&env_path)?;
+    let existed = env.entries().any(|(existing, _)| existing == key);
+    env.upsert(key, value);
+    env.save()?;
+
+    if existed {
+        println!("Updated {} in {}", key, env_path);
+    } else {
+        println!("Added {} to {}", key, env_path);
+    }
+    Ok(())
+}
+
+fn env_remove(state: &AppState, key: &str) -> Result<()> {
+    let env_path = state.env_path()?;
+    let mut env = envfile::EnvFile::load(&env_path)?;
+    if env.remove(key) {
+        env.save()?;
+        println!("Removed {} from {}", key, env_path);
+    } else {
+        println!("Key {} not present in {}", key, env_path);
+    }
+    Ok(())
 }
 
 fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Result<()> {
@@ -372,5 +410,10 @@ impl AppState {
 
     fn effective_language(&self, override_lang: Option<String>) -> Option<String> {
         self.ctx.effective_language(&self.config, override_lang)
+    }
+
+    fn env_path(&self) -> Result<Utf8PathBuf> {
+        let cwd = envfile::current_working_dir()?;
+        envfile::locate(&cwd)
     }
 }

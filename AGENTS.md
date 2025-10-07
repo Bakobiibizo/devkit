@@ -15,10 +15,11 @@
 - [x] Set up module tree and placeholder files per spec.
 - [x] Wire task indexing into command execution with dry-run logging.
 - [x] Implement config discovery/override mechanics (`--file`, default path).
-- [ ] Flesh out `.env` helper read/write workflows.
+- [x] Flesh out `.env` helper read/write workflows.
 - [ ] Implement `dev install` execution flow (language detection, scaffolds, tooling orchestration).
 
 ## Lessons Learned
 - Example config in `docs/example.config.toml` demonstrates command flattening with string refs; loader must support both array and string variants.
 - CLI now exposes `dev install [<language>]`, defaulting to `--language` or config default when omitted.
 - Runner now loads config, flattens tasks, and streams command status with `[ok]/[warn]` markers for clear feedback.
+- `.env` commands locate nearest file (cwd → git root), create if missing, and preserve comments/ordering on write.
