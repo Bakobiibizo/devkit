@@ -1,5 +1,7 @@
+use std::io::BufRead;
 use std::path::PathBuf;
-use std::process::Command as ProcessCommand;
+use std::process::{Command as ProcessCommand, Stdio};
+use std::thread;
 use std::time::Instant;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -357,42 +359,62 @@ fn run_external_command(argv: &[String]) -> Result<()> {
         bail!("invalid installer command: empty argv");
     }
     println!("  -> {}", format_command(argv));
-    let output = run_process_with_output(argv)?;
+    let status = run_process_streaming(argv)?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if !stdout.trim().is_empty() {
-        for line in stdout.lines() {
-            println!("     stdout | {}", line);
-        }
-    }
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !stderr.trim().is_empty() {
-        for line in stderr.lines() {
-            println!("     stderr | {}", line);
-        }
-    }
-
-    if output.status.success() {
+    if status.success() {
         println!("     [ok]");
         Ok(())
     } else {
         bail!(
             "installer command `{}` failed with exit code {:?}",
             format_command(argv),
-            output.status.code()
+            status.code()
         )
     }
 }
 
-fn run_process_with_output(argv: &[String]) -> Result<std::process::Output> {
+fn run_process_streaming(argv: &[String]) -> Result<std::process::ExitStatus> {
     let mut command = ProcessCommand::new(&argv[0]);
     if argv.len() > 1 {
         command.args(&argv[1..]);
     }
-    command
-        .output()
-        .with_context(|| format!("executing `{}`", format_command(argv)))
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("executing `{}`", format_command(argv)))?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let stdout_handle = stdout.map(|mut pipe| {
+        thread::spawn(move || {
+            let reader = std::io::BufReader::new(&mut pipe);
+            for line in reader.lines().flatten() {
+                println!("     stdout | {}", line);
+            }
+        })
+    });
+
+    let stderr_handle = stderr.map(|mut pipe| {
+        thread::spawn(move || {
+            let reader = std::io::BufReader::new(&mut pipe);
+            for line in reader.lines().flatten() {
+                println!("     stderr | {}", line);
+            }
+        })
+    });
+
+    if let Some(handle) = stdout_handle {
+        let _ = handle.join();
+    }
+    if let Some(handle) = stderr_handle {
+        let _ = handle.join();
+    }
+
+    child
+        .wait()
+        .with_context(|| format!("waiting on `{}`", format_command(argv)))
 }
 
 fn pipeline_for_language(config: &DevConfig, language: &str, verb: Verb) -> Option<Vec<String>> {

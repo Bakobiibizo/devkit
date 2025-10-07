@@ -28,4 +28,4 @@
 - `dev install` scaffolds language templates (Rust/Python/TS) and runs optional provisioning commands from config.
 - Templates are embedded via `rust-embed`; installers emit `[ok]` status as they run provisioning commands.
 - `dev config` now summarises parsed config, supports `generate`, and reloads using embedded example.
-- Added `--force` overwrite option for `dev config generate` and richer install command output.
+- Added `--force` overwrite option for `dev config generate` and installer streams stdout/stderr live.
