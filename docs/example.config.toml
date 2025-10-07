@@ -1,0 +1,262 @@
+# dev configuration file (unified verbs)
+
+default_language = "rust"
+
+# ===================== Rust ========================
+
+[tasks.rust_build]
+commands = [["cargo", "build", "--release"]]
+
+[tasks.rust_fmt]
+commands = [["cargo", "fmt"]]
+
+[tasks.rust_fmt_check]
+commands = [["cargo", "fmt", "--", "--check"]]
+
+[tasks.rust_lint]
+# regular lint (may warn, does not modify files)
+commands = [["cargo", "clippy"]]
+
+[tasks.rust_lint_check]
+# fail on warnings (good for CI/check)
+commands = [["cargo", "clippy", "--", "-D", "warnings"]]
+
+[tasks.rust_type]
+# Rust "type check" is effectively cargo check
+commands = [["cargo", "check"]]
+
+[tasks.rust_test]
+commands = [["cargo", "test"]]
+
+[tasks.rust_audit]
+commands = [["cargo", "audit"]]
+
+[tasks.rust_deny]
+commands = [["cargo", "deny"]]
+
+[tasks.rust_udeps]
+commands = [["cargo", "udeps"]]
+
+# grouped
+[tasks.rust_fix]
+# auto-fixable actions only
+commands = [
+  "rust_fmt"
+]
+
+[tasks.rust_check]
+# pre-commit style: no file modifications
+commands = [
+  "rust_fmt_check",
+  "rust_lint_check",
+  "rust_type",
+  "rust_test"
+]
+
+[tasks.rust_ci_extras]
+# Security, license, and dep hygiene. Safe for CI, no file writes.
+commands = [
+  ["cargo", "audit"],
+  ["cargo", "deny", "check"],
+  ["cargo", "udeps"]
+]
+
+[tasks.rust_ci]
+commands = [
+  "rust_check",
+  "rust_ci_extras"
+]
+
+# ===================== Python ========================
+
+[tasks.py_fmt]
+# formatter (write)
+commands = [["uv", "run", "ruff", "format", "."]]
+
+[tasks.py_fmt_check]
+# formatter, no write
+commands = [["uv", "run", "ruff", "format", "--check", "."]]
+
+[tasks.py_lint]
+# static lint, no write
+commands = [["uv", "run", "ruff", "check", "."]]
+
+[tasks.py_lint_fix]
+# auto-fixable lint
+commands = [["uv", "run", "ruff", "check", ".", "--fix"]]
+
+[tasks.py_type]
+commands = [["uv", "run", "mypy", "."]]
+
+[tasks.py_test]
+commands = [["uv", "run", "pytest"]]
+
+[tasks.py_fix]
+commands = [
+  "py_lint_fix",
+  "py_fmt"
+]
+
+[tasks.py_check]
+commands = [
+  "py_fmt_check",
+  "py_lint",
+  "py_type",
+  "py_test"
+]
+
+[tasks.py_all]
+commands = [
+  ["uv", "run", "ruff", "check", "."],
+  ["uv", "run", "ruff", "format", "."],
+  ["uv", "run", "mypy", "."],
+  ["uv", "run", "pytest"]
+]
+
+[tasks.py_precommit_all]
+commands = [["uv", "run", "pre-commit", "run", "--all-files"]]
+
+[tasks.py_ci]
+commands = [
+  "py_fmt_check",
+  "py_lint",
+  "py_type",
+  "py_test"
+  # If you want hooks here, add: "py_precommit_all"
+]
+
+# ===================== TypeScript ========================
+
+[tasks.ts_fmt]
+# write changes
+commands = [["pnpm", "prettier", "--write", "."]]
+
+[tasks.ts_fmt_check]
+# no write
+commands = [["pnpm", "prettier", "--check", "."]]
+
+[tasks.ts_lint]
+# no write by default, fail on warnings
+commands = [["pnpx", "eslint", ".", "--ext", ".ts,.tsx", "--max-warnings", "0"]]
+
+[tasks.ts_lint_fix]
+# auto-fixable
+commands = [["pnpx", "eslint", ".", "--ext", ".ts,.tsx", "--fix"]]
+
+[tasks.ts_type]
+commands = [["pnpm", "tsc", "--noEmit"]]
+
+[tasks.ts_type_build]
+commands = [["pnpm", "tsc", "-p", "tsconfig.build.json"]]
+
+[tasks.ts_test]
+# choose your default test runner here; vitest shown
+commands = [["pnpm", "vitest", "--run"]]
+
+[tasks.ts_test_jest]
+commands = [["pnpm", "jest", "--runInBand"]]
+
+[tasks.ts_hygiene]
+commands = [["pnpm", "dlx", "ts-prune"]]
+
+[tasks.ts_fix]
+commands = [
+  "ts_lint_fix",
+  "ts_fmt"
+]
+
+[tasks.ts_check]
+commands = [
+  "ts_fmt_check",
+  "ts_lint",
+  "ts_type",
+  "ts_test",
+  "ts_hygiene"
+]
+
+
+[tasks.ts_ci]
+commands = [
+  "ts_fmt_check",
+  "ts_lint",
+  "ts_type",
+  "ts_test",
+  "ts_hygiene"
+]
+
+# ===================== Language installs ========================
+
+[languages.rust]
+install = [
+  ["cargo", "install", "cargo-audit"],
+  ["cargo", "install", "cargo-deny", "--version", "0.18.3"],
+  ["cargo", "install", "cargo-udeps", "--version", "0.1.56", "--locked"]
+]
+
+# Map the six verbs to tasks
+[languages.rust.pipelines]
+fmt   = ["rust_fmt"]
+lint  = ["rust_lint_check"]
+type  = ["rust_type"]
+test  = ["rust_test"]
+fix   = ["rust_fix"]
+check = ["rust_check"]
+ci    = ["rust_ci"]
+
+[languages.python]
+install = [["uv", "sync"]]
+
+[languages.python.pipelines]
+fmt   = ["py_fmt"]
+lint  = ["py_lint"]
+type  = ["py_type"]
+test  = ["py_test"]
+fix   = ["py_fix"]
+check = ["py_check"]
+ci    = ["py_ci"]
+
+[languages.typescript]
+install = [["pnpm", "install"]]
+
+[languages.typescript.pipelines]
+fmt   = ["ts_fmt"]
+lint  = ["ts_lint"]
+type  = ["ts_type"]
+test  = ["ts_test"]        # or ["ts_test_jest"]
+fix   = ["ts_fix"]
+check = ["ts_check"]
+ci    = ["ts_ci"]
+
+# ===================== Monorepo "all" aggregations ========================
+# These run language tasks in a stable order: Rust, Python, TS.
+
+[tasks.all_fmt]
+commands = ["rust_fmt", "py_fmt", "ts_fmt"]
+
+[tasks.all_lint]
+commands = ["rust_lint_check", "py_lint", "ts_lint"]
+
+[tasks.all_type]
+commands = ["rust_type", "py_type", "ts_type"]
+
+[tasks.all_test]
+commands = ["rust_test", "py_test", "ts_test"]
+
+[tasks.all_fix]
+commands = ["rust_fix", "py_fix", "ts_fix"]
+
+[tasks.all_check]
+# No file writes. Equivalent to running each language's precommit gate.
+commands = ["rust_check", "py_check", "ts_check"]
+
+[tasks.all_ci]
+# Heavier CI gate that includes extras like audit/deny/udeps and hygiene.
+commands = ["rust_ci", "py_ci", "ts_ci"]
+
+# ===================== Git ========================
+
+[git]
+# Optional overrides
+# main_branch = "main"
+# release_branch = "release-candidate"
+# allowed_branch_tags = ["feat", "fix", "docs", "chore", "refactor", "perf", "test", "build", "ci"]
