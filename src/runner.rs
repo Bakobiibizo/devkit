@@ -232,13 +232,22 @@ fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Resul
     let config_path = ctx.resolve_config_path()?;
     match command {
         None | Some(ConfigCommand::Show) => {
-            println!("{}", config_path);
+            if !config_path.exists() {
+                println!("No config found at {}.", config_path);
+                println!("Use `dev config generate` to scaffold a default configuration.");
+                return Ok(());
+            }
+
+            let config = config::load_from_path(&config_path)?;
+            println!("Config path: {}", config_path);
+            println!("{}", config::format_summary(&config));
             Ok(())
         }
         Some(ConfigCommand::Check) => {
             let config = config::load_from_path(&config_path)?;
             let _ = TaskIndex::from_config(&config)?;
             println!("Config OK: {}", config_path);
+            println!("{}", config::format_summary(&config));
             Ok(())
         }
         Some(ConfigCommand::Generate { path }) => {
@@ -247,11 +256,18 @@ fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Resul
                     .map_err(|_| anyhow!("config generate path must be valid UTF-8"))?,
                 None => Utf8PathBuf::from(config_path.clone()),
             };
-            println!("(todo) Generate config at {}", target);
+            config::write_example_config(&target)?;
+            println!("Wrote example config to {}", target);
             Ok(())
         }
         Some(ConfigCommand::Reload) => {
-            println!("Config reloaded on each invocation of the CLI.");
+            if !config_path.exists() {
+                println!("No config found at {}. Nothing to reload.", config_path);
+                return Ok(());
+            }
+            let config = config::load_from_path(&config_path)?;
+            println!("Reloaded config from {}", config_path);
+            println!("{}", config::format_summary(&config));
             Ok(())
         }
     }
