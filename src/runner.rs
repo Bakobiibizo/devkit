@@ -250,14 +250,18 @@ fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Resul
             println!("{}", config::format_summary(&config));
             Ok(())
         }
-        Some(ConfigCommand::Generate { path }) => {
+        Some(ConfigCommand::Generate { path, force }) => {
             let target = match path {
                 Some(path) => Utf8PathBuf::from_path_buf(path)
                     .map_err(|_| anyhow!("config generate path must be valid UTF-8"))?,
                 None => Utf8PathBuf::from(config_path.clone()),
             };
-            config::write_example_config(&target)?;
-            println!("Wrote example config to {}", target);
+            config::write_example_config(&target, force)?;
+            if force {
+                println!("Overwrote config at {}", target);
+            } else {
+                println!("Wrote example config to {}", target);
+            }
             Ok(())
         }
         Some(ConfigCommand::Reload) => {
@@ -353,17 +357,42 @@ fn run_external_command(argv: &[String]) -> Result<()> {
         bail!("invalid installer command: empty argv");
     }
     println!("  -> {}", format_command(argv));
-    let status = run_process(argv)?;
-    if status.success() {
+    let output = run_process_with_output(argv)?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if !stdout.trim().is_empty() {
+        for line in stdout.lines() {
+            println!("     stdout | {}", line);
+        }
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stderr.trim().is_empty() {
+        for line in stderr.lines() {
+            println!("     stderr | {}", line);
+        }
+    }
+
+    if output.status.success() {
         println!("     [ok]");
         Ok(())
     } else {
         bail!(
             "installer command `{}` failed with exit code {:?}",
             format_command(argv),
-            status.code()
+            output.status.code()
         )
     }
+}
+
+fn run_process_with_output(argv: &[String]) -> Result<std::process::Output> {
+    let mut command = ProcessCommand::new(&argv[0]);
+    if argv.len() > 1 {
+        command.args(&argv[1..]);
+    }
+    command
+        .output()
+        .with_context(|| format!("executing `{}`", format_command(argv)))
 }
 
 fn pipeline_for_language(config: &DevConfig, language: &str, verb: Verb) -> Option<Vec<String>> {

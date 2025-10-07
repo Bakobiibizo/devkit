@@ -47,7 +47,7 @@ Commands:
 
   config                           Display config
   config check                     Validate config and display its path
-  config generate <PATH>           Generate <PATH> from default config 
+  config generate <PATH> [--force] Generate <PATH> from default config 
                                     (default: ~/.dev/config.toml)
   config reload                    Reparse config and reindex tasks
 ```
@@ -364,7 +364,7 @@ pub enum LangCmd {
 pub enum ConfigCmd {
   Show,
   Check,
-  Generate { path: Option<std::path::PathBuf> },
+  Generate { path: Option<std::path::PathBuf>, #[arg(long="force")] force: bool },
   Reload,
 }
 

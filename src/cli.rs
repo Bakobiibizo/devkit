@@ -198,7 +198,12 @@ pub enum EnvCommand {
 pub enum ConfigCommand {
     Show,
     Check,
-    Generate { path: Option<PathBuf> },
+    Generate {
+        #[arg()]
+        path: Option<PathBuf>,
+        #[arg(long = "force", default_value_t = false)]
+        force: bool,
+    },
     Reload,
 }
 

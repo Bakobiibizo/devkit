@@ -58,10 +58,10 @@ pub fn load_from_path(path: &Utf8Path) -> Result<DevConfig> {
     toml::from_str(&raw).with_context(|| format!("parsing config {}", path))
 }
 
-pub fn write_example_config(path: &Utf8Path) -> Result<()> {
-    if path.exists() {
+pub fn write_example_config(path: &Utf8Path, overwrite: bool) -> Result<()> {
+    if path.exists() && !overwrite {
         bail!(
-            "{} already exists; remove it or specify a different path",
+            "{} already exists; rerun with --force to overwrite",
             path
         );
     }
