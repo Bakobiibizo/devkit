@@ -131,10 +131,15 @@ fn handle_install(state: &AppState, args: InstallArgs) -> Result<()> {
     scaffold::install(&language)
 }
 
-fn handle_language(_state: &AppState, command: LanguageCommand) -> Result<()> {
+fn handle_language(state: &AppState, command: LanguageCommand) -> Result<()> {
     match command {
         LanguageCommand::Set { name } => {
-            println!("(todo) Update default language to `{name}` in config.");
+            config::set_default_language(&state.config_path, &name)?;
+            println!(
+                "Default language set to `{}` in {}",
+                name, state.config_path
+            );
+            println!("Reload config to apply for this session.");
             Ok(())
         }
     }

@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use camino::Utf8Path;
 use serde::Deserialize;
 use toml::Value;
+use toml_edit::{DocumentMut, value};
 
 /// Root configuration document loaded from `~/.dev/config.toml` by default.
 #[derive(Debug, Deserialize)]
@@ -52,4 +53,22 @@ pub struct GitConfig {
 pub fn load_from_path(path: &Utf8Path) -> Result<DevConfig> {
     let raw = fs::read_to_string(path).with_context(|| format!("reading config {}", path))?;
     toml::from_str(&raw).with_context(|| format!("parsing config {}", path))
+}
+
+pub fn set_default_language(path: &Utf8Path, language: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("creating directory {}", parent))?;
+    }
+
+    let mut doc: DocumentMut = if path.exists() {
+        let raw = fs::read_to_string(path).with_context(|| format!("reading config {}", path))?;
+        raw.parse()
+            .with_context(|| format!("parsing config {}", path))?
+    } else {
+        DocumentMut::new()
+    };
+
+    doc["default_language"] = value(language);
+
+    fs::write(path, doc.to_string()).with_context(|| format!("writing config {}", path))
 }
