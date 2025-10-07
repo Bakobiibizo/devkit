@@ -2,7 +2,7 @@ pub mod python;
 pub mod rust;
 pub mod typescript;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 pub fn install(language: &str) -> Result<()> {
     match language {

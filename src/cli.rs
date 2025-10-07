@@ -27,7 +27,9 @@ pub enum Command {
     /// List available tasks and pipelines.
     List,
     /// Execute a named task or pipeline.
-    Run { task: String },
+    Run {
+        task: String,
+    },
     /// Standard verbs dispatch to the current or selected language pipeline.
     Fmt,
     Lint,
@@ -38,7 +40,9 @@ pub enum Command {
     Check,
     Ci,
     /// Run aggregations across all languages for a given verb.
-    All { verb: Verb },
+    All {
+        verb: Verb,
+    },
     /// Install tooling and scaffolds for a language (defaults to configured language).
     Install(InstallArgs),
     /// Manage language defaults.
@@ -79,6 +83,20 @@ pub enum Verb {
     Fix,
     Check,
     Ci,
+}
+
+impl Verb {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Verb::Fmt => "fmt",
+            Verb::Lint => "lint",
+            Verb::TypeCheck => "type",
+            Verb::Test => "test",
+            Verb::Fix => "fix",
+            Verb::Check => "check",
+            Verb::Ci => "ci",
+        }
+    }
 }
 
 #[derive(Subcommand, Debug)]
