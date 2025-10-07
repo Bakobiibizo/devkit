@@ -1,0 +1,4 @@
+line-length = 100
+target-version = "py311"
+extend-select = ["I", "UP", "PL", "RUF"]
+ignore = ["E501"]

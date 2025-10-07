@@ -123,12 +123,27 @@ fn handle_install(state: &AppState, args: InstallArgs) -> Result<()> {
     })?;
 
     if state.ctx.dry_run {
-        println!("[dry-run] would install tooling for `{}`", language);
+        println!(
+            "[dry-run] would install scaffolds and tooling for `{}`",
+            language
+        );
         return Ok(());
     }
 
-    println!("Installing tooling for `{}`...", language);
-    scaffold::install(&language)
+    println!("Installing scaffolds for `{}`...", language);
+    scaffold::install(&language)?;
+
+    if let Some(commands) = install_commands(&state.config, &language) {
+        if commands.is_empty() {
+            return Ok(());
+        }
+        println!("Running provisioning commands for `{}`:", language);
+        for command in commands {
+            run_external_command(&command)?;
+        }
+    }
+
+    Ok(())
 }
 
 fn handle_language(state: &AppState, command: LanguageCommand) -> Result<()> {
@@ -315,6 +330,24 @@ fn format_command(argv: &[String]) -> String {
         .join(" ")
 }
 
+fn run_external_command(argv: &[String]) -> Result<()> {
+    if argv.is_empty() {
+        bail!("invalid installer command: empty argv");
+    }
+    println!("  -> {}", format_command(argv));
+    let status = run_process(argv)?;
+    if status.success() {
+        println!("     [ok]");
+        Ok(())
+    } else {
+        bail!(
+            "installer command `{}` failed with exit code {:?}",
+            format_command(argv),
+            status.code()
+        )
+    }
+}
+
 fn pipeline_for_language(config: &DevConfig, language: &str, verb: Verb) -> Option<Vec<String>> {
     let languages = config.languages.as_ref()?;
     let lang = languages.get(language)?;
@@ -335,6 +368,12 @@ fn pipeline_lookup<'a>(
         Verb::Check => pipelines.check.as_ref(),
         Verb::Ci => pipelines.ci.as_ref(),
     }
+}
+
+fn install_commands(config: &DevConfig, language: &str) -> Option<Vec<Vec<String>>> {
+    let languages = config.languages.as_ref()?;
+    let lang = languages.get(language)?;
+    lang.install.clone()
 }
 
 #[derive(Clone, Debug)]
