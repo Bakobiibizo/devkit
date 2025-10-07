@@ -35,7 +35,7 @@ commands = [["cargo", "audit"]]
 commands = [["cargo", "deny"]]
 
 [tasks.rust_udeps]
-commands = [["cargo", "udeps"]]
+commands = [["cargo", "+nightly", "udeps"]]
 
 # grouped
 [tasks.rust_fix]
@@ -58,7 +58,7 @@ commands = [
 commands = [
   ["cargo", "audit"],
   ["cargo", "deny", "check"],
-  ["cargo", "udeps"]
+  ["cargo", "+nightly", "udeps"]
 ]
 
 [tasks.rust_ci]
