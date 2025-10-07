@@ -115,6 +115,18 @@ pub fn format_summary(config: &DevConfig) -> String {
         }
     }
 
+    if let Some(git) = &config.git {
+        let main = git.main_branch.as_deref().unwrap_or("<unset>");
+        let release = git.release_branch.as_deref().unwrap_or("<unset>");
+        let version = git.version_file.as_deref().unwrap_or("<unset>");
+        let changelog = git.changelog.as_deref().unwrap_or("<unset>");
+        let _ = writeln!(
+            out,
+            "Git: main={}, release={}, version_file={}, changelog={}",
+            main, release, version, changelog
+        );
+    }
+
     out
 }
 

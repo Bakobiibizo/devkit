@@ -6,7 +6,6 @@ mod logging;
 mod runner;
 mod scaffold;
 mod tasks;
-mod util;
 mod versioning;
 
 fn main() -> anyhow::Result<()> {

@@ -50,11 +50,10 @@ impl EnvFile {
                 key: existing,
                 value: existing_value,
             } = line
+                && existing == key
             {
-                if existing == key {
-                    *existing_value = value.to_owned();
-                    return;
-                }
+                *existing_value = value.to_owned();
+                return;
             }
         }
 

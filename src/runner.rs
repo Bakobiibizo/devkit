@@ -20,6 +20,9 @@ pub fn run(cli: Cli) -> Result<()> {
     let ctx = CliContext::from(&cli);
     ctx.apply_chdir()?;
 
+    let _ = ctx.no_color;
+    let _ = ctx.verbose;
+
     match cli.command {
         Command::Config { command } => handle_config_only(&ctx, command),
         Command::Language {
@@ -186,11 +189,11 @@ fn env_list(state: &AppState) -> Result<()> {
     entries.sort_by(|a, b| a.0.cmp(b.0));
 
     if entries.is_empty() {
-        println!("No environment variables defined in {}.", env_path);
+        println!("No environment variables defined in {}.", env.path());
         return Ok(());
     }
 
-    println!("Environment variables in {}:", env_path);
+    println!("Environment variables in {}:", env.path());
     for (key, value) in entries {
         let mask = if value.is_empty() { "" } else { "*****" };
         println!("  {}={}", key, mask);
@@ -205,10 +208,11 @@ fn env_add(state: &AppState, key: &str, value: &str) -> Result<()> {
     env.upsert(key, value);
     env.save()?;
 
+    let target = env.path();
     if existed {
-        println!("Updated {} in {}", key, env_path);
+        println!("Updated {} in {}", key, target);
     } else {
-        println!("Added {} to {}", key, env_path);
+        println!("Added {} to {}", key, target);
     }
     Ok(())
 }
@@ -218,9 +222,9 @@ fn env_remove(state: &AppState, key: &str) -> Result<()> {
     let mut env = envfile::EnvFile::load(&env_path)?;
     if env.remove(key) {
         env.save()?;
-        println!("Removed {} from {}", key, env_path);
+        println!("Removed {} from {}", key, env.path());
     } else {
-        println!("Key {} not present in {}", key, env_path);
+        println!("Key {} not present in {}", key, env.path());
     }
     Ok(())
 }
@@ -251,7 +255,7 @@ fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Resul
             let target = match path {
                 Some(path) => Utf8PathBuf::from_path_buf(path)
                     .map_err(|_| anyhow!("config generate path must be valid UTF-8"))?,
-                None => Utf8PathBuf::from(config_path.clone()),
+                None => config_path.clone(),
             };
             config::write_example_config(&target, force)?;
             if force {
@@ -384,7 +388,7 @@ fn run_process_streaming(argv: &[String]) -> Result<std::process::ExitStatus> {
 
     let stdout_handle = stdout.map(|pipe| {
         thread::spawn(move || {
-            for line in BufReader::new(pipe).lines().flatten() {
+            for line in BufReader::new(pipe).lines().map_while(Result::ok) {
                 println!("     stdout | {}", line);
             }
         })
@@ -392,7 +396,7 @@ fn run_process_streaming(argv: &[String]) -> Result<std::process::ExitStatus> {
 
     let stderr_handle = stderr.map(|pipe| {
         thread::spawn(move || {
-            for line in BufReader::new(pipe).lines().flatten() {
+            for line in BufReader::new(pipe).lines().map_while(Result::ok) {
                 println!("     stderr | {}", line);
             }
         })
@@ -417,10 +421,7 @@ fn pipeline_for_language(config: &DevConfig, language: &str, verb: Verb) -> Opti
     pipeline_lookup(pipelines, verb).cloned()
 }
 
-fn pipeline_lookup<'a>(
-    pipelines: &'a crate::config::Pipelines,
-    verb: Verb,
-) -> Option<&'a Vec<String>> {
+fn pipeline_lookup(pipelines: &crate::config::Pipelines, verb: Verb) -> Option<&Vec<String>> {
     match verb {
         Verb::Fmt => pipelines.fmt.as_ref(),
         Verb::Lint => pipelines.lint.as_ref(),
