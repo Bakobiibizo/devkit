@@ -29,3 +29,4 @@
 - Templates are embedded via `rust-embed`; installers emit `[ok]` status as they run provisioning commands.
 - `dev config` now summarises parsed config, supports `generate`, and reloads using embedded example.
 - Added `--force` overwrite option for `dev config generate` and installer streams stdout/stderr live.
+- Rust deny template now whitelists MPL-2.0 and Unicode licenses so `cargo deny check` passes by default.

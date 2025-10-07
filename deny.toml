@@ -1,0 +1,15 @@
+[licenses]
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MPL-2.0",
+    "MIT",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib"
+]
+
+[licenses.private]
+ignore = true
