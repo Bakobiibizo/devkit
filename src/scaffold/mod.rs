@@ -2,12 +2,11 @@ pub mod python;
 pub mod rust;
 pub mod typescript;
 
-use std::path::PathBuf;
+use std::fs;
 
 use anyhow::{Context, Result, anyhow, bail};
-use camino::Utf8PathBuf;
-
-const TEMPLATE_DIR: &str = "templates";
+use camino::Utf8Path;
+use rust_embed::RustEmbed;
 
 pub fn install(language: &str) -> Result<()> {
     match language {
@@ -18,20 +17,15 @@ pub fn install(language: &str) -> Result<()> {
     }
 }
 
-pub fn template_path(template: &str) -> Result<Utf8PathBuf> {
-    let root = project_root()?;
-    let candidate = root.join(TEMPLATE_DIR).join(template);
-    Utf8PathBuf::from_path_buf(candidate).map_err(|_| anyhow!("template path not valid UTF-8"))
-}
+#[derive(RustEmbed)]
+#[folder = "templates"]
+struct Templates;
 
-fn project_root() -> Result<PathBuf> {
-    let mut dir = std::env::current_dir().context("determining current directory")?;
-    loop {
-        if dir.join("Cargo.toml").exists() {
-            return Ok(dir);
-        }
-        if !dir.pop() {
-            bail!("could not locate project root");
-        }
+pub fn write_template(destination: &Utf8Path, template: &str) -> Result<()> {
+    let file = Templates::get(template)
+        .ok_or_else(|| anyhow!("embedded template `{}` missing", template))?;
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("creating directory {}", parent))?;
     }
+    fs::write(destination, file.data.as_ref()).with_context(|| format!("writing {}", destination))
 }

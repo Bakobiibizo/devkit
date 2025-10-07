@@ -133,17 +133,19 @@ fn handle_install(state: &AppState, args: InstallArgs) -> Result<()> {
     println!("Installing scaffolds for `{}`...", language);
     scaffold::install(&language)?;
 
-    if let Some(commands) = install_commands(&state.config, &language) {
-        if commands.is_empty() {
-            return Ok(());
+    match install_commands(&state.config, &language) {
+        Some(commands) if !commands.is_empty() => {
+            println!("Running provisioning commands for `{}`:", language);
+            for command in commands {
+                run_external_command(&command)?;
+            }
+            Ok(())
         }
-        println!("Running provisioning commands for `{}`:", language);
-        for command in commands {
-            run_external_command(&command)?;
+        _ => {
+            println!("No provisioning commands configured for `{}`.", language);
+            Ok(())
         }
     }
-
-    Ok(())
 }
 
 fn handle_language(state: &AppState, command: LanguageCommand) -> Result<()> {

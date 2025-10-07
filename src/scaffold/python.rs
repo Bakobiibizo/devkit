@@ -1,9 +1,7 @@
-use std::fs;
-
-use anyhow::{Context, Result};
+use anyhow::Result;
 use camino::Utf8Path;
 
-use super::template_path;
+use super::write_template;
 
 const RUFF: &str = "ruff.toml";
 const MYPY: &str = "mypy.ini";
@@ -24,14 +22,7 @@ fn ensure_file(target: &str, template: &str) -> Result<()> {
         return Ok(());
     }
 
-    if let Some(parent) = destination.parent() {
-        fs::create_dir_all(parent).with_context(|| format!("creating directory {}", parent))?;
-    }
-
-    let template_path = template_path(template)?;
-    let contents = fs::read_to_string(&template_path)
-        .with_context(|| format!("reading template {}", template_path))?;
-    fs::write(destination, contents).with_context(|| format!("writing {}", destination))?;
+    write_template(destination, template)?;
     println!("  created {}", destination);
     Ok(())
 }

@@ -26,3 +26,4 @@
 - `.env` commands locate nearest file (cwd → git root), create if missing, and preserve comments/ordering on write.
 - `dev language set <name>` now writes through toml_edit so user config keeps comments intact.
 - `dev install` scaffolds language templates (Rust/Python/TS) and runs optional provisioning commands from config.
+- Templates are embedded via `rust-embed`; installers emit `[ok]` status as they run provisioning commands.
