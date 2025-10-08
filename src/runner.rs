@@ -162,11 +162,11 @@ fn handle_language(state: &AppState, command: LanguageCommand) -> Result<()> {
     }
 }
 
-fn handle_git(_state: &AppState, command: GitCommand) -> Result<()> {
+fn handle_git(state: &AppState, command: GitCommand) -> Result<()> {
     match command {
-        GitCommand::BranchCreate(args) => gitops::branch_create(&args),
-        GitCommand::BranchFinalize(args) => gitops::branch_finalize(&args),
-        GitCommand::ReleasePr(args) => gitops::release_pr(&args),
+        GitCommand::BranchCreate(args) => gitops::branch_create(&args, state.ctx.dry_run),
+        GitCommand::BranchFinalize(args) => gitops::branch_finalize(&args, state.ctx.dry_run),
+        GitCommand::ReleasePr(args) => gitops::release_pr(&args, state.ctx.dry_run),
     }
 }
 
