@@ -170,8 +170,8 @@ fn handle_git(state: &AppState, command: GitCommand) -> Result<()> {
     }
 }
 
-fn handle_version(_state: &AppState, command: VersionCommand) -> Result<()> {
-    versioning::handle(command)
+fn handle_version(state: &AppState, command: VersionCommand) -> Result<()> {
+    versioning::handle(&state.config, state.ctx.dry_run, command)
 }
 
 fn handle_env(state: &AppState, command: Option<EnvCommand>) -> Result<()> {

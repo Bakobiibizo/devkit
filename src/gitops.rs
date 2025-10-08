@@ -56,14 +56,88 @@ pub fn branch_create(args: &BranchCreate, dry_run: bool) -> Result<()> {
 }
 
 pub fn branch_finalize(args: &BranchFinalize, dry_run: bool) -> Result<()> {
-    let _ = (args, dry_run);
-    // TODO: execute git workflow for finalizing a branch.
+    if !args.allow_dirty && !dry_run {
+        ensure_clean_worktree()?;
+    }
+
+    let base = args.base.as_deref().unwrap_or(DEFAULT_BASE_BRANCH);
+    let mut steps: Vec<Vec<String>> = vec![
+        vec![
+            "git".into(),
+            "fetch".into(),
+            "--all".into(),
+            "--prune".into(),
+        ],
+        vec!["git".into(), "checkout".into(), base.into()],
+        vec![
+            "git".into(),
+            "pull".into(),
+            "--rebase".into(),
+            "origin".into(),
+            base.into(),
+        ],
+        vec![
+            "git".into(),
+            "merge".into(),
+            "--no-ff".into(),
+            args.name.clone(),
+        ],
+        vec!["git".into(), "push".into(), "origin".into(), base.into()],
+    ];
+
+    if args.delete {
+        steps.push(vec![
+            "git".into(),
+            "branch".into(),
+            "-d".into(),
+            args.name.clone(),
+        ]);
+        steps.push(vec![
+            "git".into(),
+            "push".into(),
+            "origin".into(),
+            "--delete".into(),
+            args.name.clone(),
+        ]);
+    }
+
+    run_steps(&steps, dry_run)?;
+    let deleted = if args.delete { " and deleted" } else { "" };
+    println!("Merged `{}` into `{}`{}.", args.name, base, deleted);
     Ok(())
 }
 
 pub fn release_pr(args: &ReleasePr, dry_run: bool) -> Result<()> {
-    let _ = (args, dry_run);
-    // TODO: assemble changelog and open PR via gh.
+    let base = args.from.as_deref().unwrap_or(DEFAULT_BASE_BRANCH);
+    let head = args.to.as_deref().unwrap_or("HEAD");
+
+    let commits = collect_commits(base, head)?;
+    update_changelog(base, head, &commits, dry_run)?;
+
+    let mut steps = vec![vec![
+        "git".into(),
+        "fetch".into(),
+        "--all".into(),
+        "--prune".into(),
+    ]];
+    steps.push(vec![
+        "gh".into(),
+        "pr".into(),
+        "create".into(),
+        "--base".into(),
+        base.into(),
+        "--head".into(),
+        head.into(),
+        "--fill".into(),
+    ]);
+    if args.no_open
+        && let Some(step) = steps.last_mut()
+    {
+        step.push("--no-open".into());
+    }
+
+    run_steps(&steps, dry_run)?;
+    println!("Prepared release PR from `{}` into `{}`.", head, base);
     Ok(())
 }
 
@@ -102,5 +176,71 @@ fn ensure_clean_worktree() -> Result<()> {
             "working tree has uncommitted changes; pass --allow-dirty to override"
         ));
     }
+    Ok(())
+}
+
+fn collect_commits(base: &str, head: &str) -> Result<Vec<String>> {
+    let range = format!("{}..{}", base, head);
+    let output = Command::new("git")
+        .args(["log", &range, "--pretty=format:%s"])
+        .output()
+        .with_context(|| format!("collecting commits for {}", range))?;
+    if !output.status.success() {
+        let code = output.status.code().unwrap_or(-1);
+        bail!("git log failed with status {}", code);
+    }
+    let commits = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    Ok(commits)
+}
+
+fn update_changelog(base: &str, head: &str, commits: &[String], dry_run: bool) -> Result<()> {
+    if commits.is_empty() {
+        println!("No commits between {} and {}.", base, head);
+        return Ok(());
+    }
+
+    use chrono::Utc;
+    use std::fs;
+    use std::io::Write;
+
+    let changelog_path = std::env::current_dir()
+        .context("reading current directory")?
+        .join("CHANGELOG.md");
+
+    let mut section = String::new();
+    let date = Utc::now().format("%Y-%m-%d");
+    section.push_str(&format!("## {} ({base} → {head})\n\n", date));
+    for commit in commits {
+        section.push_str("- ");
+        section.push_str(commit);
+        section.push('\n');
+    }
+    section.push('\n');
+
+    if dry_run {
+        println!(
+            "[dry-run] update {} with:\n{}",
+            changelog_path.display(),
+            section
+        );
+        return Ok(());
+    }
+
+    let mut existing = if changelog_path.exists() {
+        fs::read_to_string(&changelog_path)
+            .with_context(|| format!("reading {}", changelog_path.display()))?
+    } else {
+        String::from("# Changelog\n\n")
+    };
+
+    existing.push_str(&section);
+    fs::File::create(&changelog_path)
+        .with_context(|| format!("opening {}", changelog_path.display()))?
+        .write_all(existing.as_bytes())
+        .with_context(|| format!("writing {}", changelog_path.display()))?;
     Ok(())
 }

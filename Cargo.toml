@@ -16,6 +16,9 @@ serde_json = "1.0"
 toml = "0.8"
 toml_edit = "0.22"
 dirs = "5.0"
+semver = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 
 [package.metadata.cargo-udeps.ignore]
 dependencies = ["chrono", "regex", "serde_json"]
