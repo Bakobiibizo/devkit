@@ -12,8 +12,6 @@ pub fn branch_create(args: &BranchCreate, dry_run: bool) -> Result<()> {
         ensure_clean_worktree()?;
     }
 
-    let _ = args.push; // retained for CLI compatibility; upstream push now always occurs.
-
     let base = args.base.as_deref().unwrap_or(DEFAULT_BASE_BRANCH);
     let mut steps: Vec<Vec<String>> = vec![
         vec![
@@ -39,19 +37,23 @@ pub fn branch_create(args: &BranchCreate, dry_run: bool) -> Result<()> {
         ],
     ];
 
-    steps.push(vec![
-        "git".into(),
-        "push".into(),
-        "--set-upstream".into(),
-        "origin".into(),
-        args.name.clone(),
-    ]);
+    if args.push {
+        steps.push(vec![
+            "git".into(),
+            "push".into(),
+            "--set-upstream".into(),
+            "origin".into(),
+            args.name.clone(),
+        ]);
+    }
 
     run_steps(&steps, dry_run)?;
-    println!(
-        "Branch `{}` created from `{}` and pushed to origin.",
-        args.name, base
-    );
+    let pushed = if args.push {
+        " and pushed to origin"
+    } else {
+        ""
+    };
+    println!("Branch `{}` created from `{}`{}.", args.name, base, pushed);
     Ok(())
 }
 

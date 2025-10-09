@@ -13,26 +13,8 @@
 - Addressed cargo-udeps false positives by ignoring chrono/regex/serde_json.
 - Prevented release PR creation when no commits exist between base and head.
 - Ensured config generation overwrites only with `--force` and summarises configs on show/check/reload.
+- Avoided changelog writes before git status checks in release PR flow.
 
+## 2025-10-09 - v0.1.1
 
-## 2025-10-09 (main → release-candidate)
-
-- feat: improve release workflow defaults
-- Merge branch 'feat/change-log' into release-candidate
-- feat(changelog): added change log
-
-## 2025-10-09 (main → release-candidate)
-
-- chore(changelog): update
-- feat: improve release workflow defaults
-- Merge branch 'feat/change-log' into release-candidate
-- feat(changelog): added change log
-
-## 2025-10-09 (main → release-candidate)
-
-- fix(changelog): changed timing on ensure_clean_workingtree to before changelog entry
-- chore(changelog): update
-- feat: improve release workflow defaults
-- Merge branch 'feat/change-log' into release-candidate
-- feat(changelog): added change log
-
+- Describe the notable changes here.
