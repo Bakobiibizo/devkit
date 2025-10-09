@@ -112,6 +112,10 @@ pub fn branch_finalize(args: &BranchFinalize, dry_run: bool) -> Result<()> {
 }
 
 pub fn release_pr(args: &ReleasePr, dry_run: bool, config: &DevConfig) -> Result<()> {
+    if !dry_run {
+        ensure_clean_worktree()?;
+    }
+
     let base = args
         .from
         .as_deref()

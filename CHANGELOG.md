@@ -21,3 +21,10 @@
 - Merge branch 'feat/change-log' into release-candidate
 - feat(changelog): added change log
 
+## 2025-10-09 (main → release-candidate)
+
+- chore(changelog): update
+- feat: improve release workflow defaults
+- Merge branch 'feat/change-log' into release-candidate
+- feat(changelog): added change log
+
