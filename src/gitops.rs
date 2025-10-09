@@ -145,7 +145,6 @@ pub fn release_pr(args: &ReleasePr, dry_run: bool, config: &DevConfig) -> Result
         );
         return Ok(());
     }
-    update_changelog(base, head, &commits, dry_run)?;
 
     let mut steps = vec![vec![
         "git".into(),
@@ -184,6 +183,7 @@ pub fn release_pr(args: &ReleasePr, dry_run: bool, config: &DevConfig) -> Result
     }
 
     run_steps(&steps, dry_run)?;
+    update_changelog(base, head, &commits, dry_run)?;
     println!("Prepared release PR from `{}` into `{}`.", head, base);
     Ok(())
 }
