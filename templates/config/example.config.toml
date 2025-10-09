@@ -121,8 +121,8 @@ commands = [
   "py_fmt_check",
   "py_lint",
   "py_type",
-  "py_test"
-  # If you want hooks here, add: "py_precommit_all"
+  "py_test",
+  "py_precommit_all"
 ]
 
 # ===================== TypeScript ========================
