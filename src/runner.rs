@@ -505,6 +505,10 @@ struct AppState {
 impl AppState {
     fn new(ctx: CliContext) -> Result<Self> {
         let config_path = ctx.resolve_config_path()?;
+        if !config_path.exists() {
+            config::write_example_config(&config_path, true)?;
+            println!("Generated config at {}", config_path);
+        }
         let config = config::load_from_path(&config_path)?;
         let tasks = TaskIndex::from_config(&config)?;
         Ok(Self {
