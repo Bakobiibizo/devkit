@@ -15,3 +15,9 @@
 - Ensured config generation overwrites only with `--force` and summarises configs on show/check/reload.
 
 
+## 2025-10-09 (main → release-candidate)
+
+- feat: improve release workflow defaults
+- Merge branch 'feat/change-log' into release-candidate
+- feat(changelog): added change log
+
