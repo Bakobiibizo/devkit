@@ -12,11 +12,11 @@ pub struct Cli {
     pub file: Option<PathBuf>,
     #[arg(short = 'l', long = "language")]
     pub language: Option<String>,
-    #[arg(short = 'n', long = "dry-run")]
+    #[arg(short = 'n', long = "dry-run", global = true)]
     pub dry_run: bool,
     #[arg(short = 'v', long = "verbose", action = clap::ArgAction::Count)]
     pub verbose: u8,
-    #[arg(long = "no-color")]
+    #[arg(long = "no-color", global = true)]
     pub no_color: bool,
     #[command(subcommand)]
     pub command: Command,
