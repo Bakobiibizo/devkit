@@ -131,7 +131,8 @@ pub struct BranchCreate {
 
 #[derive(Args, Debug)]
 pub struct BranchFinalize {
-    pub name: String,
+    #[arg()]
+    pub name: Option<String>,
     #[arg(long = "into")]
     pub base: Option<String>,
     #[arg(long)]

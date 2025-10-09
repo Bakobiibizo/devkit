@@ -10,6 +10,8 @@ pub fn branch_create(args: &BranchCreate, dry_run: bool) -> Result<()> {
         ensure_clean_worktree()?;
     }
 
+    let _ = args.push; // retained for CLI compatibility; upstream push now always occurs.
+
     let base = args.base.as_deref().unwrap_or(DEFAULT_BASE_BRANCH);
     let mut steps: Vec<Vec<String>> = vec![
         vec![
@@ -35,15 +37,13 @@ pub fn branch_create(args: &BranchCreate, dry_run: bool) -> Result<()> {
         ],
     ];
 
-    if args.push {
-        steps.push(vec![
-            "git".into(),
-            "push".into(),
-            "--set-upstream".into(),
-            "origin".into(),
-            args.name.clone(),
-        ]);
-    }
+    steps.push(vec![
+        "git".into(),
+        "push".into(),
+        "--set-upstream".into(),
+        "origin".into(),
+        args.name.clone(),
+    ]);
 
     run_steps(&steps, dry_run)?;
     let pushed = if args.push {
@@ -60,6 +60,10 @@ pub fn branch_finalize(args: &BranchFinalize, dry_run: bool) -> Result<()> {
         ensure_clean_worktree()?;
     }
 
+    let branch = match &args.name {
+        Some(name) => name.clone(),
+        None => current_branch()?.ok_or_else(|| anyhow!("unable to determine current branch"))?,
+    };
     let base = args.base.as_deref().unwrap_or(DEFAULT_BASE_BRANCH);
     let mut steps: Vec<Vec<String>> = vec![
         vec![
@@ -80,7 +84,7 @@ pub fn branch_finalize(args: &BranchFinalize, dry_run: bool) -> Result<()> {
             "git".into(),
             "merge".into(),
             "--no-ff".into(),
-            args.name.clone(),
+            branch.clone(),
         ],
         vec!["git".into(), "push".into(), "origin".into(), base.into()],
     ];
@@ -90,20 +94,20 @@ pub fn branch_finalize(args: &BranchFinalize, dry_run: bool) -> Result<()> {
             "git".into(),
             "branch".into(),
             "-d".into(),
-            args.name.clone(),
+            branch.clone(),
         ]);
         steps.push(vec![
             "git".into(),
             "push".into(),
             "origin".into(),
             "--delete".into(),
-            args.name.clone(),
+            branch.clone(),
         ]);
     }
 
     run_steps(&steps, dry_run)?;
     let deleted = if args.delete { " and deleted" } else { "" };
-    println!("Merged `{}` into `{}`{}.", args.name, base, deleted);
+    println!("Merged `{}` into `{}`{}.", branch, base, deleted);
     Ok(())
 }
 
@@ -112,6 +116,13 @@ pub fn release_pr(args: &ReleasePr, dry_run: bool) -> Result<()> {
     let head = args.to.as_deref().unwrap_or("HEAD");
 
     let commits = collect_commits(base, head)?;
+    if commits.is_empty() {
+        println!(
+            "No commits between {} and {}; skipping PR creation.",
+            base, head
+        );
+        return Ok(());
+    }
     update_changelog(base, head, &commits, dry_run)?;
 
     let mut steps = vec![vec![
@@ -177,6 +188,22 @@ fn ensure_clean_worktree() -> Result<()> {
         ));
     }
     Ok(())
+}
+
+fn current_branch() -> Result<Option<String>> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .context("determining current branch")?;
+    if !output.status.success() {
+        let code = output.status.code().unwrap_or(-1);
+        bail!("git rev-parse failed with status {}", code);
+    }
+    let branch = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if branch == "HEAD" {
+        return Ok(None);
+    }
+    Ok(Some(branch))
 }
 
 fn collect_commits(base: &str, head: &str) -> Result<Vec<String>> {

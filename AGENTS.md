@@ -30,4 +30,5 @@
 - `dev config` now summarises parsed config, supports `generate`, and reloads using embedded example.
 - Added `--force` overwrite option for `dev config generate` and installer streams stdout/stderr live.
 - Rust deny template now whitelists MPL-2.0 and Unicode licenses so `cargo deny check` passes by default.
+- Git flows (`branch-create`, `branch-finalize`, `release-pr`) and version commands are fully implemented; logging installs a tracing subscriber on first use.
 - `dev git branch-create` now runs the documented git workflow (fetch, checkout base, pull, create branch, optional push).
