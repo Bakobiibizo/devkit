@@ -8,6 +8,7 @@
 - Version commands (`show`, `bump`, `changelog`) support semantic versioning, changelog updates, staging/commit/tag, and dry-run previews.
 - Logging initializes a tracing subscriber to enable structured logs.
 - Cargo scaffolds and deny templates now allow MPL/Unicode licenses and run `cargo +nightly udeps` by default.
+- `dev install python` now ensures `uv`, `ruff`, and `mypy` are available via `uv tool install`.
 
 ### Fixed
 - Addressed cargo-udeps false positives by ignoring chrono/regex/serde_json.
