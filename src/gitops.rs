@@ -2,8 +2,10 @@ use anyhow::{Context, Result, anyhow, bail};
 use std::process::Command;
 
 const DEFAULT_BASE_BRANCH: &str = "release-candidate";
+const DEFAULT_MAIN_BRANCH: &str = "main";
 
 use crate::cli::{BranchCreate, BranchFinalize, ReleasePr};
+use crate::config::DevConfig;
 
 pub fn branch_create(args: &BranchCreate, dry_run: bool) -> Result<()> {
     if !args.allow_dirty && !dry_run {
@@ -46,12 +48,10 @@ pub fn branch_create(args: &BranchCreate, dry_run: bool) -> Result<()> {
     ]);
 
     run_steps(&steps, dry_run)?;
-    let pushed = if args.push {
-        " and pushed to origin"
-    } else {
-        ""
-    };
-    println!("Branch `{}` created from `{}`{}.", args.name, base, pushed);
+    println!(
+        "Branch `{}` created from `{}` and pushed to origin.",
+        args.name, base
+    );
     Ok(())
 }
 
@@ -111,9 +111,27 @@ pub fn branch_finalize(args: &BranchFinalize, dry_run: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn release_pr(args: &ReleasePr, dry_run: bool) -> Result<()> {
-    let base = args.from.as_deref().unwrap_or(DEFAULT_BASE_BRANCH);
-    let head = args.to.as_deref().unwrap_or("HEAD");
+pub fn release_pr(args: &ReleasePr, dry_run: bool, config: &DevConfig) -> Result<()> {
+    let base = args
+        .from
+        .as_deref()
+        .or_else(|| {
+            config
+                .git
+                .as_ref()
+                .and_then(|git| git.main_branch.as_deref())
+        })
+        .unwrap_or(DEFAULT_MAIN_BRANCH);
+    let head = args
+        .to
+        .as_deref()
+        .or_else(|| {
+            config
+                .git
+                .as_ref()
+                .and_then(|git| git.release_branch.as_deref())
+        })
+        .unwrap_or(DEFAULT_BASE_BRANCH);
 
     let commits = collect_commits(base, head)?;
     if commits.is_empty() {
@@ -131,6 +149,20 @@ pub fn release_pr(args: &ReleasePr, dry_run: bool) -> Result<()> {
         "--all".into(),
         "--prune".into(),
     ]];
+    steps.push(vec!["git".into(), "checkout".into(), head.into()]);
+    steps.push(vec![
+        "git".into(),
+        "pull".into(),
+        "--rebase".into(),
+        "origin".into(),
+        head.into(),
+    ]);
+    steps.push(vec![
+        "git".into(),
+        "push".into(),
+        "origin".into(),
+        head.into(),
+    ]);
     steps.push(vec![
         "gh".into(),
         "pr".into(),
@@ -141,10 +173,10 @@ pub fn release_pr(args: &ReleasePr, dry_run: bool) -> Result<()> {
         head.into(),
         "--fill".into(),
     ]);
-    if args.no_open
-        && let Some(step) = steps.last_mut()
-    {
-        step.push("--no-open".into());
+    if args.no_open {
+        if let Some(step) = steps.last_mut() {
+            step.push("--no-open".into());
+        }
     }
 
     run_steps(&steps, dry_run)?;
