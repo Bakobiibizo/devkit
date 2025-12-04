@@ -45,7 +45,14 @@ fn bump_version(config: &DevConfig, args: &VersionBump, dry_run: bool) -> Result
         );
     } else {
         write_version(&mut doc, kind, &target);
-        fs::write(&path, doc.to_string()).with_context(|| format!("writing {}", path))?;
+        let output = match kind {
+            VersionFileKind::PackageJson => doc["__raw_json"]
+                .as_str()
+                .map(|s| format!("{}\n", s))
+                .unwrap_or_default(),
+            _ => doc.to_string(),
+        };
+        fs::write(&path, output).with_context(|| format!("writing {}", path))?;
         println!("Updated {} to {}", path, target);
     }
 
@@ -95,12 +102,16 @@ fn print_changelog(_config: &DevConfig, args: &ChangelogArgs) -> Result<()> {
 }
 
 fn read_manifest(path: &Utf8Path, kind: VersionFileKind) -> Result<DocumentMut> {
+    let contents = fs::read_to_string(path).with_context(|| format!("reading {}", path))?;
     match kind {
-        VersionFileKind::CargoToml => {
-            let contents = fs::read_to_string(path).with_context(|| format!("reading {}", path))?;
-            contents
-                .parse::<DocumentMut>()
-                .with_context(|| format!("parsing {}", path))
+        VersionFileKind::CargoToml | VersionFileKind::PyprojectToml => contents
+            .parse::<DocumentMut>()
+            .with_context(|| format!("parsing {}", path)),
+        VersionFileKind::PackageJson => {
+            // Store raw JSON in a pseudo-TOML doc for uniform handling
+            let mut doc = DocumentMut::new();
+            doc["__raw_json"] = toml_edit::value(contents);
+            Ok(doc)
         }
     }
 }
@@ -111,12 +122,39 @@ fn current_version(doc: &DocumentMut, kind: VersionFileKind) -> Result<Version> 
             .as_str()
             .ok_or_else(|| anyhow!("missing package.version in Cargo.toml"))
             .and_then(|s| Version::parse(s).with_context(|| format!("parsing version `{}`", s))),
+        VersionFileKind::PyprojectToml => doc["project"]["version"]
+            .as_str()
+            .ok_or_else(|| anyhow!("missing project.version in pyproject.toml"))
+            .and_then(|s| Version::parse(s).with_context(|| format!("parsing version `{}`", s))),
+        VersionFileKind::PackageJson => {
+            let raw = doc["__raw_json"]
+                .as_str()
+                .ok_or_else(|| anyhow!("internal error: missing raw JSON"))?;
+            let json: serde_json::Value =
+                serde_json::from_str(raw).context("parsing package.json")?;
+            let ver_str = json["version"]
+                .as_str()
+                .ok_or_else(|| anyhow!("missing version in package.json"))?;
+            Version::parse(ver_str).with_context(|| format!("parsing version `{}`", ver_str))
+        }
     }
 }
 
 fn write_version(doc: &mut DocumentMut, kind: VersionFileKind, version: &Version) {
     match kind {
         VersionFileKind::CargoToml => doc["package"]["version"] = value(version.to_string()),
+        VersionFileKind::PyprojectToml => doc["project"]["version"] = value(version.to_string()),
+        VersionFileKind::PackageJson => {
+            // Update version in the stored raw JSON
+            if let Some(raw) = doc["__raw_json"].as_str() {
+                if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(raw) {
+                    json["version"] = serde_json::Value::String(version.to_string());
+                    if let Ok(updated) = serde_json::to_string_pretty(&json) {
+                        doc["__raw_json"] = value(updated);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -159,6 +197,7 @@ fn locate_version_file(config: &DevConfig) -> Result<(Utf8PathBuf, VersionFileKi
     let cwd = Utf8PathBuf::from_path_buf(cwd)
         .map_err(|_| anyhow!("current directory is not valid UTF-8"))?;
 
+    // Explicit version_file in config takes precedence
     if let Some(raw) = config
         .git
         .as_ref()
@@ -169,13 +208,20 @@ fn locate_version_file(config: &DevConfig) -> Result<(Utf8PathBuf, VersionFileKi
         return Ok((path, kind));
     }
 
-    let default = cwd.join("Cargo.toml");
-    Ok((default, VersionFileKind::CargoToml))
+    // Fall back to default based on configured language
+    let (filename, kind) = match config.default_language.as_deref() {
+        Some("python") => ("pyproject.toml", VersionFileKind::PyprojectToml),
+        Some("typescript" | "javascript") => ("package.json", VersionFileKind::PackageJson),
+        _ => ("Cargo.toml", VersionFileKind::CargoToml),
+    };
+    Ok((cwd.join(filename), kind))
 }
 
 fn detect_version_file(path: &Utf8Path) -> Result<VersionFileKind> {
     match path.file_name() {
         Some("Cargo.toml") => Ok(VersionFileKind::CargoToml),
+        Some("pyproject.toml") => Ok(VersionFileKind::PyprojectToml),
+        Some("package.json") => Ok(VersionFileKind::PackageJson),
         Some(name) => bail!("unsupported version file `{}`", name),
         None => bail!("version file must not be a directory"),
     }
@@ -307,6 +353,8 @@ fn latest_tag() -> Result<Option<String>> {
 #[derive(Clone, Copy)]
 enum VersionFileKind {
     CargoToml,
+    PyprojectToml,
+    PackageJson,
 }
 
 const DEFAULT_BASE_BRANCH: &str = "release-candidate";
