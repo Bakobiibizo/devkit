@@ -1,5 +1,5 @@
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, Stdio};
 use std::thread;
 use std::time::Instant;
@@ -23,6 +23,18 @@ enum ConfigPathSource {
     Explicit,
     Discovered,
     HomeDefault,
+}
+
+fn should_scaffold_in_cwd(language: &str) -> bool {
+    // `dev install` is used both for bootstrapping a brand new project and for provisioning
+    // dependencies in an existing one. When we detect common manifests in the current
+    // directory, we skip template scaffolding to avoid overwriting/adding unrelated files.
+    match language {
+        "typescript" | "ts" => !Path::new("package.json").exists(),
+        "python" => !Path::new("pyproject.toml").exists(),
+        "rust" => !Path::new("Cargo.toml").exists(),
+        _ => true,
+    }
 }
 
 impl ConfigPathSource {
@@ -222,8 +234,12 @@ fn handle_install(state: &AppState, args: InstallArgs) -> Result<()> {
         return Ok(());
     }
 
-    println!("Installing scaffolds for `{}`...", language);
-    scaffold::install(&language)?;
+    if should_scaffold_in_cwd(&language) {
+        println!("Installing scaffolds for `{}`...", language);
+        scaffold::install(&language)?;
+    } else {
+        println!("Skipping scaffolds for `{}` (project already initialized)", language);
+    }
 
     match install_commands(&state.config, &language) {
         Some(commands) if !commands.is_empty() => {
