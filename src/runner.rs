@@ -181,8 +181,8 @@ fn handle_start(state: &AppState, args: StartArgs) -> Result<()> {
         "pnpm".to_owned(),
         "run".to_owned(),
         "dev".to_owned(),
-        "--host".to_owned(),
         "--".to_owned(),
+        "--host".to_owned(),
         "--port".to_owned(),
         port.to_string(),
     ];
