@@ -173,19 +173,18 @@ fn handle_run(state: &AppState, task: &str) -> Result<()> {
 }
 
 fn handle_start(state: &AppState, args: StartArgs) -> Result<()> {
-    let port = args
-        .port
-        .unwrap_or_else(|| if args.prod { 8091 } else { 8031 });
-
-    let argv = vec![
+    let mut argv = vec![
         "pnpm".to_owned(),
         "run".to_owned(),
         "dev".to_owned(),
-        "--".to_owned(),
         "--host".to_owned(),
-        "--port".to_owned(),
-        port.to_string(),
     ];
+
+    let port = args.port.or_else(|| if args.prod { Some(8091) } else { None });
+    if let Some(port) = port {
+        argv.push("--port".to_owned());
+        argv.push(port.to_string());
+    }
 
     println!("Starting dev server: {}", format_command(&argv));
     if state.ctx.dry_run {
