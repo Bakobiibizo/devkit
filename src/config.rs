@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use camino::Utf8Path;
 use serde::Deserialize;
 use toml::Value;
-use toml_edit::{DocumentMut, value};
+use toml_edit::{Array, DocumentMut, Item, Table, Value as EditValue, value};
 
 use crate::scaffold;
 
@@ -14,9 +14,94 @@ use crate::scaffold;
 #[derive(Debug, Deserialize)]
 pub struct DevConfig {
     pub default_language: Option<String>,
+    pub default_project: Option<String>,
+    pub projects: Option<BTreeMap<String, Project>>,
     pub tasks: Option<BTreeMap<String, Task>>,
     pub languages: Option<BTreeMap<String, Language>>,
     pub git: Option<GitConfig>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TaskUpdateMode {
+    Overwrite,
+    Append,
+}
+
+pub fn upsert_task_command(
+    path: &Utf8Path,
+    task_name: &str,
+    argv: &[String],
+    mode: TaskUpdateMode,
+) -> Result<()> {
+    if argv.is_empty() {
+        bail!("task command argv must not be empty");
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("creating directory {}", parent))?;
+    }
+
+    let mut doc: DocumentMut = if path.exists() {
+        let raw = fs::read_to_string(path).with_context(|| format!("reading config {}", path))?;
+        raw.parse()
+            .with_context(|| format!("parsing config {}", path))?
+    } else {
+        DocumentMut::new()
+    };
+
+    if !doc.as_table().contains_key("tasks") {
+        doc["tasks"] = Item::Table(Table::new());
+    }
+
+    let tasks_item = doc
+        .get_mut("tasks")
+        .and_then(Item::as_table_mut)
+        .ok_or_else(|| anyhow::anyhow!("config has non-table `tasks` entry"))?;
+
+    let task_item = tasks_item
+        .entry(task_name)
+        .or_insert(Item::Table(Table::new()));
+
+    let task_table = task_item
+        .as_table_mut()
+        .ok_or_else(|| anyhow::anyhow!("task `{}` is not a table", task_name))?;
+
+    let mut argv_array = Array::new();
+    for arg in argv {
+        argv_array.push(EditValue::from(arg.clone()));
+    }
+
+    match mode {
+        TaskUpdateMode::Overwrite => {
+            let mut outer = Array::new();
+            outer.push(EditValue::Array(argv_array));
+            task_table.insert("commands", Item::Value(EditValue::Array(outer)));
+        }
+        TaskUpdateMode::Append => {
+            if !task_table.contains_key("commands") {
+                let mut outer = Array::new();
+                outer.push(EditValue::Array(argv_array));
+                task_table.insert("commands", Item::Value(EditValue::Array(outer)));
+            } else {
+                let commands_item = task_table
+                    .get_mut("commands")
+                    .ok_or_else(|| anyhow::anyhow!("task `{}` missing commands", task_name))?;
+                let arr = commands_item
+                    .as_value_mut()
+                    .and_then(EditValue::as_array_mut)
+                    .ok_or_else(|| anyhow::anyhow!("task `{}` has non-array commands", task_name))?;
+                arr.push(EditValue::Array(argv_array));
+            }
+        }
+    }
+
+    fs::write(path, doc.to_string()).with_context(|| format!("writing config {}", path))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Project {
+    pub chdir: Option<String>,
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

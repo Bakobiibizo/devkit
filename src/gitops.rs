@@ -25,6 +25,7 @@ pub fn branch_create(args: &BranchCreate, dry_run: bool) -> Result<()> {
             "git".into(),
             "pull".into(),
             "--rebase".into(),
+            "--autostash".into(),
             "origin".into(),
             base.into(),
         ],
@@ -67,49 +68,45 @@ pub fn branch_finalize(args: &BranchFinalize, dry_run: bool) -> Result<()> {
         None => current_branch()?.ok_or_else(|| anyhow!("unable to determine current branch"))?,
     };
     let base = args.base.as_deref().unwrap_or(DEFAULT_BASE_BRANCH);
-    let mut steps: Vec<Vec<String>> = vec![
+
+    // Push the branch first to ensure it's up to date on remote
+    let steps: Vec<Vec<String>> = vec![
         vec![
             "git".into(),
             "fetch".into(),
             "--all".into(),
             "--prune".into(),
         ],
-        vec!["git".into(), "checkout".into(), base.into()],
         vec![
-            "git".into(),
-            "pull".into(),
-            "--rebase".into(),
-            "origin".into(),
-            base.into(),
-        ],
-        vec![
-            "git".into(),
-            "merge".into(),
-            "--no-ff".into(),
-            branch.clone(),
-        ],
-        vec!["git".into(), "push".into(), "origin".into(), base.into()],
-    ];
-
-    if args.delete {
-        steps.push(vec![
-            "git".into(),
-            "branch".into(),
-            "-d".into(),
-            branch.clone(),
-        ]);
-        steps.push(vec![
             "git".into(),
             "push".into(),
+            "-u".into(),
             "origin".into(),
-            "--delete".into(),
             branch.clone(),
-        ]);
+        ],
+        vec![
+            "gh".into(),
+            "pr".into(),
+            "create".into(),
+            "--base".into(),
+            base.into(),
+            "--head".into(),
+            branch.clone(),
+            "--fill".into(),
+        ],
+    ];
+
+    // Warn if --delete was passed (deprecated, deletion now happens via GitHub)
+    if args.delete {
+        println!("Note: --delete is deprecated. Branch deletion now happens via GitHub after PR merge.");
     }
 
     run_steps(&steps, dry_run)?;
-    let deleted = if args.delete { " and deleted" } else { "" };
-    println!("Merged `{}` into `{}`{}.", branch, base, deleted);
+    println!(
+        "Created PR for `{}` into `{}`.",
+        branch, base
+    );
+    println!("Review and merge via GitHub, then delete the branch if desired.");
     Ok(())
 }
 

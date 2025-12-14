@@ -10,6 +10,8 @@ pub struct Cli {
     pub chdir: Option<PathBuf>,
     #[arg(short = 'f', long = "file")]
     pub file: Option<PathBuf>,
+    #[arg(long = "project", global = true)]
+    pub project: Option<String>,
     #[arg(short = 'l', long = "language")]
     pub language: Option<String>,
     #[arg(short = 'n', long = "dry-run", global = true)]
@@ -70,6 +72,8 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<ConfigCommand>,
     },
+    #[command(external_subcommand)]
+    External(Vec<String>),
 }
 
 /// Shared verb enumeration for consistent handling across languages.
@@ -198,6 +202,7 @@ pub enum EnvCommand {
 #[derive(Subcommand, Debug)]
 pub enum ConfigCommand {
     Show,
+    Path,
     Check,
     Generate {
         #[arg()]
@@ -206,6 +211,16 @@ pub enum ConfigCommand {
         force: bool,
     },
     Reload,
+    Add {
+        #[arg()]
+        name: Option<String>,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+        #[arg(long = "force", default_value_t = false)]
+        force: bool,
+        #[arg(long = "append", default_value_t = false)]
+        append: bool,
+    },
 }
 
 /// Helper entry point so `main` can stay minimal.

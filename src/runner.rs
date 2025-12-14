@@ -3,20 +3,46 @@ use std::path::PathBuf;
 use std::process::{Command as ProcessCommand, Stdio};
 use std::thread;
 use std::time::Instant;
+use std::{fs, io};
 
 use anyhow::{Context, Result, anyhow, bail};
 use camino::Utf8PathBuf;
+use clap::Parser;
 
 use crate::cli::{
     Cli, Command, ConfigCommand, EnvCommand, GitCommand, InstallArgs, LanguageCommand, Verb,
     VersionCommand,
 };
-use crate::config::DevConfig;
+use crate::config::{DevConfig, TaskUpdateMode};
 use crate::envfile;
 use crate::tasks::{CommandSpec, TaskIndex};
 use crate::{config, gitops, scaffold, versioning};
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ConfigPathSource {
+    Explicit,
+    Discovered,
+    HomeDefault,
+}
+
+impl ConfigPathSource {
+    fn as_str(&self) -> &'static str {
+        match self {
+            ConfigPathSource::Explicit => "explicit",
+            ConfigPathSource::Discovered => "discovered",
+            ConfigPathSource::HomeDefault => "home-default",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ResolvedConfigPath {
+    path: Utf8PathBuf,
+    source: ConfigPathSource,
+}
+
 pub fn run(cli: Cli) -> Result<()> {
+    let cli = normalize_external(cli)?;
     let ctx = CliContext::from(&cli);
     ctx.apply_chdir()?;
 
@@ -53,16 +79,74 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Version { command } => handle_version(state, command),
         Command::Env { command } => handle_env(state, command),
         Command::Config { .. } => unreachable!("config commands handled earlier"),
+        Command::External(extra) => {
+            bail!("unknown command: {}", extra.join(" "))
+        }
     }
+}
+
+fn normalize_external(cli: Cli) -> Result<Cli> {
+    let Command::External(extra) = &cli.command else {
+        return Ok(cli);
+    };
+
+    if extra.is_empty() {
+        return Ok(cli);
+    }
+
+    let mut argv: Vec<String> = Vec::new();
+    argv.push("dev".to_owned());
+
+    if let Some(chdir) = &cli.chdir {
+        argv.push("--chdir".to_owned());
+        argv.push(chdir.to_string_lossy().to_string());
+    }
+
+    if let Some(file) = &cli.file {
+        argv.push("--file".to_owned());
+        argv.push(file.to_string_lossy().to_string());
+    }
+
+    if let Some(language) = &cli.language {
+        argv.push("--language".to_owned());
+        argv.push(language.clone());
+    }
+
+    if cli.dry_run {
+        argv.push("--dry-run".to_owned());
+    }
+
+    if cli.no_color {
+        argv.push("--no-color".to_owned());
+    }
+
+    for _ in 0..cli.verbose {
+        argv.push("--verbose".to_owned());
+    }
+
+    argv.push("--project".to_owned());
+    argv.push(extra[0].clone());
+
+    argv.extend(extra[1..].iter().cloned());
+
+    Cli::try_parse_from(argv).map_err(|err| anyhow!(err.to_string()))
 }
 
 fn handle_list(state: &AppState) -> Result<()> {
     if state.tasks.is_empty() {
-        println!("No tasks defined in {}.", state.config_path);
+        println!(
+            "No tasks defined in {} ({}).",
+            state.config_path,
+            state.config_source.as_str()
+        );
         return Ok(());
     }
 
-    println!("Tasks defined in {}:", state.config_path);
+    println!(
+        "Tasks defined in {} ({}):",
+        state.config_path,
+        state.config_source.as_str()
+    );
     for name in state.tasks.task_names() {
         println!("  - {}", name);
     }
@@ -230,8 +314,13 @@ fn env_remove(state: &AppState, key: &str) -> Result<()> {
 }
 
 fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Result<()> {
-    let config_path = ctx.resolve_config_path()?;
+    let resolved = ctx.resolve_config_path()?;
+    let config_path = resolved.path;
     match command {
+        Some(ConfigCommand::Path) => {
+            println!("Config path: {} ({})", config_path, resolved.source.as_str());
+            Ok(())
+        }
         None | Some(ConfigCommand::Show) => {
             if !config_path.exists() {
                 println!("No config found at {}.", config_path);
@@ -240,14 +329,14 @@ fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Resul
             }
 
             let config = config::load_from_path(&config_path)?;
-            println!("Config path: {}", config_path);
+            println!("Config path: {} ({})", config_path, resolved.source.as_str());
             println!("{}", config::format_summary(&config));
             Ok(())
         }
         Some(ConfigCommand::Check) => {
             let config = config::load_from_path(&config_path)?;
             let _ = TaskIndex::from_config(&config)?;
-            println!("Config OK: {}", config_path);
+            println!("Config OK: {} ({})", config_path, resolved.source.as_str());
             println!("{}", config::format_summary(&config));
             Ok(())
         }
@@ -271,10 +360,261 @@ fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Resul
                 return Ok(());
             }
             let config = config::load_from_path(&config_path)?;
-            println!("Reloaded config from {}", config_path);
+            println!("Reloaded config from {} ({})", config_path, resolved.source.as_str());
             println!("{}", config::format_summary(&config));
             Ok(())
         }
+        Some(ConfigCommand::Add {
+            name,
+            command,
+            force,
+            append,
+        }) => config_add(&config_path, name, command, force, append),
+    }
+}
+
+fn config_add(
+    config_path: &Utf8PathBuf,
+    name: Option<String>,
+    command: Vec<String>,
+    force: bool,
+    append: bool,
+) -> Result<()> {
+    let mut name = name;
+    let mut command = command;
+
+    if name.is_none() {
+        name = Some(prompt("Task name: ")?);
+    }
+    let name = name
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow!("task name is required"))?;
+
+    if command.is_empty() {
+        let cmd = prompt("Command: ")?;
+        if cmd.trim().is_empty() {
+            bail!("command is required");
+        }
+        command = vec![cmd];
+    }
+
+    let (argv, render) = parse_config_add_command(&command)?;
+
+    let existed = task_exists(config_path, &name)?;
+    let mode = if append {
+        TaskUpdateMode::Append
+    } else if force {
+        TaskUpdateMode::Overwrite
+    } else if existed {
+        let choice = prompt("Task exists. Overwrite, append, or cancel? (o/a/N): ")?;
+        match choice.trim().to_lowercase().as_str() {
+            "o" | "overwrite" => TaskUpdateMode::Overwrite,
+            "a" | "append" => TaskUpdateMode::Append,
+            _ => bail!("canceled"),
+        }
+    } else {
+        TaskUpdateMode::Overwrite
+    };
+
+    println!("Config path: {}", config_path);
+    println!("Task: {}", name);
+    println!("Command: {}", render);
+    if force || append || !existed {
+        config::upsert_task_command(config_path, &name, &argv, mode)?;
+        println!("Wrote task `{}` to {}", name, config_path);
+        return Ok(());
+    }
+
+    let confirm = prompt("Write changes? (y/N): ")?;
+    if confirm.trim().eq_ignore_ascii_case("y") {
+        config::upsert_task_command(config_path, &name, &argv, mode)?;
+        println!("Wrote task `{}` to {}", name, config_path);
+        Ok(())
+    } else {
+        bail!("canceled")
+    }
+}
+
+fn parse_config_add_command(command: &[String]) -> Result<(Vec<String>, String)> {
+    if command.is_empty() {
+        bail!("command is required");
+    }
+
+    if command.len() >= 2 && command[0] == "--" {
+        let argv = command[1..].to_vec();
+        if argv.is_empty() {
+            bail!("argv after `--` must not be empty");
+        }
+        let render = format_command(&argv);
+        return Ok((argv, render));
+    }
+
+    let cmd = command.join(" ");
+    let argv = vec!["bash".to_owned(), "-lc".to_owned(), cmd.clone()];
+    Ok((argv, format!("bash -lc {}", cmd)))
+}
+
+fn prompt(label: &str) -> Result<String> {
+    print!("{}", label);
+    io::Write::flush(&mut io::stdout()).with_context(|| format!("writing prompt `{label}`"))?;
+    let mut buf = String::new();
+    io::stdin()
+        .read_line(&mut buf)
+        .with_context(|| format!("reading input for `{label}`"))?;
+    Ok(buf.trim_end_matches(['\n', '\r']).to_owned())
+}
+
+fn task_exists(path: &Utf8PathBuf, task_name: &str) -> Result<bool> {
+    if !path.exists() {
+        return Ok(false);
+    }
+
+    let raw = fs::read_to_string(path).with_context(|| format!("reading config {}", path))?;
+    let doc: toml_edit::DocumentMut = raw
+        .parse()
+        .with_context(|| format!("parsing config {}", path))?;
+    let Some(tasks) = doc.get("tasks").and_then(|item| item.as_table()) else {
+        return Ok(false);
+    };
+    Ok(tasks.contains_key(task_name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_dir() -> Utf8PathBuf {
+        let mut dir = std::env::temp_dir();
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        dir.push(format!("devkit-test-{ts}"));
+        Utf8PathBuf::from_path_buf(dir).unwrap()
+    }
+
+    #[test]
+    fn resolve_config_prefers_nearest_discovered() {
+        let root = unique_temp_dir();
+        let nested = root.join("a").join("b");
+        fs::create_dir_all(nested.as_std_path()).unwrap();
+        fs::create_dir_all(root.join(".dev").as_std_path()).unwrap();
+        let cfg = root.join(".dev").join("config.toml");
+        fs::write(cfg.as_std_path(), "default_language = 'python'\n").unwrap();
+
+        let old = std::env::current_dir().unwrap();
+        std::env::set_current_dir(nested.as_std_path()).unwrap();
+
+        let ctx = CliContext {
+            chdir: None,
+            file: None,
+            project: None,
+            language: None,
+            dry_run: false,
+            verbose: 0,
+            no_color: false,
+        };
+        let resolved = ctx.resolve_config_path().unwrap();
+        assert_eq!(resolved.source, ConfigPathSource::Discovered);
+        assert!(resolved.path.ends_with(".dev/config.toml"));
+
+        std::env::set_current_dir(old).unwrap();
+        let _ = fs::remove_dir_all(root.as_std_path());
+    }
+
+    #[test]
+    fn resolve_config_prefers_legacy_when_no_dotdev() {
+        let root = unique_temp_dir();
+        let nested = root.join("a").join("b");
+        fs::create_dir_all(nested.as_std_path()).unwrap();
+        fs::create_dir_all(root.join("tools").join("dev").as_std_path()).unwrap();
+        let cfg = root.join("tools").join("dev").join("config.toml");
+        fs::write(cfg.as_std_path(), "default_language = 'python'\n").unwrap();
+
+        let old = std::env::current_dir().unwrap();
+        std::env::set_current_dir(nested.as_std_path()).unwrap();
+
+        let ctx = CliContext {
+            chdir: None,
+            file: None,
+            project: None,
+            language: None,
+            dry_run: false,
+            verbose: 0,
+            no_color: false,
+        };
+        let resolved = ctx.resolve_config_path().unwrap();
+        assert_eq!(resolved.source, ConfigPathSource::Discovered);
+        assert!(resolved.path.ends_with("tools/dev/config.toml"));
+
+        std::env::set_current_dir(old).unwrap();
+        let _ = fs::remove_dir_all(root.as_std_path());
+    }
+
+    #[test]
+    fn resolve_config_prefers_explicit_file() {
+        let root = unique_temp_dir();
+        fs::create_dir_all(root.as_std_path()).unwrap();
+        let cfg = root.join("explicit.toml");
+        fs::write(cfg.as_std_path(), "default_language = 'python'\n").unwrap();
+
+        let ctx = CliContext {
+            chdir: None,
+            file: Some(cfg.as_std_path().to_path_buf()),
+            project: None,
+            language: None,
+            dry_run: false,
+            verbose: 0,
+            no_color: false,
+        };
+        let resolved = ctx.resolve_config_path().unwrap();
+        assert_eq!(resolved.source, ConfigPathSource::Explicit);
+        assert!(resolved.path.ends_with("explicit.toml"));
+
+        let _ = fs::remove_dir_all(root.as_std_path());
+    }
+
+    #[test]
+    fn project_applies_chdir_and_language() {
+        let root = unique_temp_dir();
+        let proj_dir = root.join("web");
+        fs::create_dir_all(proj_dir.as_std_path()).unwrap();
+        fs::create_dir_all(root.join(".dev").as_std_path()).unwrap();
+        let cfg = root.join(".dev").join("config.toml");
+        fs::write(
+            cfg.as_std_path(),
+            r#"default_language = 'python'
+
+[projects.web]
+chdir = 'web'
+language = 'typescript'
+"#,
+        )
+        .unwrap();
+
+        let old = std::env::current_dir().unwrap();
+        std::env::set_current_dir(root.as_std_path()).unwrap();
+
+        let ctx = CliContext {
+            chdir: None,
+            file: None,
+            project: Some("web".to_owned()),
+            language: None,
+            dry_run: false,
+            verbose: 0,
+            no_color: false,
+        };
+        let state = AppState::new(ctx).unwrap();
+        assert_eq!(
+            std::env::current_dir().unwrap(),
+            proj_dir.as_std_path().to_path_buf()
+        );
+        assert_eq!(state.effective_language(None).as_deref(), Some("typescript"));
+
+        std::env::set_current_dir(old).unwrap();
+        let _ = fs::remove_dir_all(root.as_std_path());
     }
 }
 
@@ -443,6 +783,7 @@ fn install_commands(config: &DevConfig, language: &str) -> Option<Vec<Vec<String
 struct CliContext {
     chdir: Option<PathBuf>,
     file: Option<PathBuf>,
+    project: Option<String>,
     language: Option<String>,
     dry_run: bool,
     verbose: u8,
@@ -458,26 +799,63 @@ impl CliContext {
         Ok(())
     }
 
-    fn resolve_config_path(&self) -> Result<Utf8PathBuf> {
+    fn resolve_config_path(&self) -> Result<ResolvedConfigPath> {
         if let Some(path) = &self.file {
-            return Utf8PathBuf::from_path_buf(path.clone())
-                .map_err(|_| anyhow!("config path must be valid UTF-8"));
+            let path = Utf8PathBuf::from_path_buf(path.clone())
+                .map_err(|_| anyhow!("config path must be valid UTF-8"))?;
+            return Ok(ResolvedConfigPath {
+                path,
+                source: ConfigPathSource::Explicit,
+            });
+        }
+
+        if let Ok(cwd) = std::env::current_dir() {
+            if let Ok(mut dir) = Utf8PathBuf::from_path_buf(cwd) {
+                loop {
+                    let preferred = dir.join(".dev").join("config.toml");
+                    if preferred.exists() {
+                        return Ok(ResolvedConfigPath {
+                            path: preferred,
+                            source: ConfigPathSource::Discovered,
+                        });
+                    }
+
+                    let legacy = dir.join("tools").join("dev").join("config.toml");
+                    if legacy.exists() {
+                        return Ok(ResolvedConfigPath {
+                            path: legacy,
+                            source: ConfigPathSource::Discovered,
+                        });
+                    }
+
+                    let Some(parent) = dir.parent() else {
+                        break;
+                    };
+                    dir = parent.to_path_buf();
+                }
+            }
         }
 
         let home = dirs::home_dir().ok_or_else(|| anyhow!("unable to determine home directory"))?;
         let mut path = home;
         path.push(".dev");
         path.push("config.toml");
-        Utf8PathBuf::from_path_buf(path).map_err(|_| anyhow!("config path must be valid UTF-8"))
+        let path = Utf8PathBuf::from_path_buf(path).map_err(|_| anyhow!("config path must be valid UTF-8"))?;
+        Ok(ResolvedConfigPath {
+            path,
+            source: ConfigPathSource::HomeDefault,
+        })
     }
 
     fn effective_language(
         &self,
         config: &DevConfig,
+        project_language: Option<&str>,
         override_lang: Option<String>,
     ) -> Option<String> {
         override_lang
             .or_else(|| self.language.clone())
+            .or_else(|| project_language.map(|s| s.to_owned()))
             .or_else(|| config.default_language.clone())
     }
 }
@@ -487,6 +865,7 @@ impl From<&Cli> for CliContext {
         Self {
             chdir: cli.chdir.clone(),
             file: cli.file.clone(),
+            project: cli.project.clone(),
             language: cli.language.clone(),
             dry_run: cli.dry_run,
             verbose: cli.verbose,
@@ -498,25 +877,55 @@ impl From<&Cli> for CliContext {
 struct AppState {
     ctx: CliContext,
     config_path: Utf8PathBuf,
+    config_source: ConfigPathSource,
     config: DevConfig,
+    project_language: Option<String>,
     tasks: TaskIndex,
 }
 
 impl AppState {
     fn new(ctx: CliContext) -> Result<Self> {
-        let config_path = ctx.resolve_config_path()?;
+        let resolved = ctx.resolve_config_path()?;
+        let config_path = resolved.path;
+        let config_source = resolved.source;
         let config = config::load_from_path(&config_path)?;
+
+        let requested_project = ctx
+            .project
+            .clone()
+            .or_else(|| config.default_project.clone());
+        let mut project_language: Option<String> = None;
+
+        if let Some(project) = requested_project.as_deref() {
+            let projects = config
+                .projects
+                .as_ref()
+                .with_context(|| format!("project `{}` requested but no projects configured", project))?;
+            let spec = projects
+                .get(project)
+                .with_context(|| format!("unknown project `{}`", project))?;
+
+            if let Some(chdir) = &spec.chdir {
+                std::env::set_current_dir(chdir)
+                    .with_context(|| format!("changing directory to project `{}` at {}", project, chdir))?;
+            }
+            project_language = spec.language.clone();
+        }
+
         let tasks = TaskIndex::from_config(&config)?;
         Ok(Self {
             ctx,
             config_path,
+            config_source,
             config,
+            project_language,
             tasks,
         })
     }
 
     fn effective_language(&self, override_lang: Option<String>) -> Option<String> {
-        self.ctx.effective_language(&self.config, override_lang)
+        self.ctx
+            .effective_language(&self.config, self.project_language.as_deref(), override_lang)
     }
 
     fn env_path(&self) -> Result<Utf8PathBuf> {
@@ -525,9 +934,15 @@ impl AppState {
     }
 }
 fn handle_language_set(ctx: &CliContext, name: String) -> Result<()> {
-    let path = ctx.resolve_config_path()?;
+    let resolved = ctx.resolve_config_path()?;
+    let path = resolved.path;
     config::set_default_language(&path, &name)?;
-    println!("Default language set to `{}` in {}", name, path);
+    println!(
+        "Default language set to `{}` in {} ({})",
+        name,
+        path,
+        resolved.source.as_str()
+    );
     println!("Reload config to apply for this session.");
     Ok(())
 }
