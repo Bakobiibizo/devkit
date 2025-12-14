@@ -32,6 +32,8 @@ pub enum Command {
     Run {
         task: String,
     },
+    /// Start a long-running development server for the current project.
+    Start(StartArgs),
     /// Standard verbs dispatch to the current or selected language pipeline.
     Fmt,
     Lint,
@@ -113,6 +115,17 @@ pub enum LanguageCommand {
 pub struct InstallArgs {
     #[arg()]
     pub language: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct StartArgs {
+    /// Override the default port for the start command.
+    #[arg(long = "port")]
+    pub port: Option<u16>,
+
+    /// Use the production port default (8091) instead of the development default (8031).
+    #[arg(long = "prod", default_value_t = false)]
+    pub prod: bool,
 }
 
 #[derive(Subcommand, Debug)]

@@ -10,8 +10,8 @@ use camino::Utf8PathBuf;
 use clap::Parser;
 
 use crate::cli::{
-    Cli, Command, ConfigCommand, EnvCommand, GitCommand, InstallArgs, LanguageCommand, Verb,
-    VersionCommand,
+    Cli, Command, ConfigCommand, EnvCommand, GitCommand, InstallArgs, LanguageCommand, StartArgs,
+    Verb, VersionCommand,
 };
 use crate::config::{DevConfig, TaskUpdateMode};
 use crate::envfile;
@@ -77,6 +77,7 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
     match command {
         Command::List => handle_list(state),
         Command::Run { task } => handle_run(state, &task),
+        Command::Start(args) => handle_start(state, args),
         Command::Fmt => handle_verb(state, Verb::Fmt),
         Command::Lint => handle_verb(state, Verb::Lint),
         Command::TypeCheck => handle_verb(state, Verb::TypeCheck),
@@ -169,6 +170,39 @@ fn handle_run(state: &AppState, task: &str) -> Result<()> {
     println!("Running task `{}`", task);
     let commands = state.tasks.flatten(task)?;
     execute_commands(state, task, &commands)
+}
+
+fn handle_start(state: &AppState, args: StartArgs) -> Result<()> {
+    let port = args
+        .port
+        .unwrap_or_else(|| if args.prod { 8091 } else { 8031 });
+
+    let argv = vec![
+        "pnpm".to_owned(),
+        "run".to_owned(),
+        "dev".to_owned(),
+        "--host".to_owned(),
+        "--".to_owned(),
+        "--port".to_owned(),
+        port.to_string(),
+    ];
+
+    println!("Starting dev server: {}", format_command(&argv));
+    if state.ctx.dry_run {
+        println!("    (dry-run) skipped");
+        return Ok(());
+    }
+
+    let status = run_process(&argv)?;
+    if status.success() {
+        Ok(())
+    } else {
+        bail!(
+            "command `{}` failed with exit code {:?}",
+            format_command(&argv),
+            status.code()
+        )
+    }
 }
 
 fn handle_verb(state: &AppState, verb: Verb) -> Result<()> {
