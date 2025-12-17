@@ -32,3 +32,4 @@
 - Rust deny template now whitelists MPL-2.0 and Unicode licenses so `cargo deny check` passes by default.
 - Git flows (`branch-create`, `branch-finalize`, `release-pr`) and version commands are fully implemented; logging installs a tracing subscriber on first use.
 - `dev git branch-create` now runs the documented git workflow (fetch, checkout base, pull, create branch, optional push).
+- Extended env management (2025-12): `--raw` flag, `get`, profiles (`profiles`/`switch`/`save`), validation (`check` with `[env]` config), templates (`init`/`template`), and diff/sync commands.

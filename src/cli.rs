@@ -65,10 +65,7 @@ pub enum Command {
         command: VersionCommand,
     },
     /// Environment variable helper commands backed by a `.env` file.
-    Env {
-        #[command(subcommand)]
-        command: Option<EnvCommand>,
-    },
+    Env(EnvArgs),
     /// Configuration display, validation, and template generation.
     Config {
         #[command(subcommand)]
@@ -205,11 +202,50 @@ pub struct ChangelogArgs {
     pub unreleased: bool,
 }
 
+#[derive(Args, Debug)]
+pub struct EnvArgs {
+    /// Show values unmasked
+    #[arg(long = "raw", default_value_t = false)]
+    pub raw: bool,
+
+    #[command(subcommand)]
+    pub command: Option<EnvCommand>,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum EnvCommand {
+    /// List all environment variables (default if no subcommand)
     List,
+    /// Get a single environment variable value
+    Get { key: String },
+    /// Add or update an environment variable
     Add { key: String, value: String },
+    /// Remove an environment variable
     Rm { key: String },
+    /// List available environment profiles (.env.*)
+    Profiles,
+    /// Switch to a different environment profile
+    Switch { profile: String },
+    /// Save current .env as a named profile
+    Save { name: String },
+    /// Validate .env against required keys in config
+    Check,
+    /// Initialize .env from .env.example if missing
+    Init,
+    /// Generate .env.example from current .env (values stripped)
+    Template,
+    /// Show diff between .env and a reference file
+    Diff {
+        /// Reference file to compare against (default: .env.example)
+        #[arg(default_value = ".env.example")]
+        reference: String,
+    },
+    /// Interactively add missing keys from a reference file
+    Sync {
+        /// Reference file to sync from (default: .env.example)
+        #[arg(default_value = ".env.example")]
+        reference: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]

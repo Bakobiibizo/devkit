@@ -260,3 +260,14 @@ commands = ["rust_ci", "py_ci", "ts_ci"]
 # main_branch = "main"
 # release_branch = "release-candidate"
 # allowed_branch_tags = ["feat", "fix", "docs", "chore", "refactor", "perf", "test", "build", "ci"]
+
+# ===================== Environment ========================
+# Define required and optional environment variables for validation.
+# Use `dev env check` to validate your .env file against these requirements.
+
+[env]
+# Required keys must be present and non-empty
+# required = ["DATABASE_URL", "API_KEY", "SECRET_KEY"]
+
+# Optional keys are checked but don't fail validation if missing
+# optional = ["DEBUG", "LOG_LEVEL", "CACHE_TTL"]

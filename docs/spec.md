@@ -41,9 +41,18 @@ Commands:
   version changelog [--since <ref>] [--unreleased]
   version show
 
-  env                              List .env variables
+  env [--raw]                       List .env variables (--raw shows values unmasked)
+  env get <KEY>                    Get a single .env variable value
   env add <KEY> <VALUE>            Add/update .env var
   env rm <KEY>                     Remove .env var
+  env profiles                     List available environment profiles (.env.*)
+  env switch <PROFILE>             Switch to a different environment profile
+  env save <NAME>                  Save current .env as a named profile
+  env check                        Validate .env against required keys in config
+  env init                         Initialize .env from .env.example if missing
+  env template                     Generate .env.example from current .env
+  env diff [<REF>]                 Show diff between .env and reference (default: .env.example)
+  env sync [<REF>]                 Add missing keys from reference file
 
   config                           Display config
   config check                     Validate config and display its path
@@ -189,9 +198,30 @@ allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "ISC"]
 
   * Look for `.env` in CWD, else project root (git top). Create if missing.
 * `dev env` prints sorted keys, masks values unless `--raw`.
+* `dev env get KEY` prints the value of a single key (useful for scripts).
 * `dev env add KEY VALUE` inserts or replaces exactly one line (`KEY=VALUE`), preserves order/comments around.
 * `dev env rm KEY` removes the line if present.
 * Use a tiny parser: read lines, allow `# comments`, `KEY=VALUE`, no multi-line.
+
+### Environment Profiles
+
+* `dev env profiles` lists available profiles (`.env.*` files, excluding `.env.example`).
+* `dev env switch <profile>` copies `.env.<profile>` to `.env`.
+* `dev env save <name>` copies current `.env` to `.env.<name>`.
+
+### Environment Validation
+
+* Config supports `[env]` section with `required` and `optional` key lists.
+* `dev env check` validates `.env` against config requirements:
+  * Errors if required keys are missing or empty.
+  * Warns if optional keys are missing.
+
+### Environment Templates
+
+* `dev env template` generates `.env.example` from current `.env` (keys only, values stripped).
+* `dev env init` copies `.env.example` to `.env` if `.env` doesn't exist.
+* `dev env diff [ref]` compares `.env` against a reference file (default: `.env.example`).
+* `dev env sync [ref]` adds missing keys from reference file to `.env`.
 
 ## Project layout (single crate)
 
