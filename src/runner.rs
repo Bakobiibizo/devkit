@@ -1033,7 +1033,13 @@ fn task_exists(path: &Utf8PathBuf, task_name: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn cwd_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     fn unique_temp_dir() -> Utf8PathBuf {
         let mut dir = std::env::temp_dir();
@@ -1047,6 +1053,7 @@ mod tests {
 
     #[test]
     fn resolve_config_prefers_nearest_discovered() {
+        let _guard = cwd_lock().lock().unwrap();
         let root = unique_temp_dir();
         let nested = root.join("a").join("b");
         fs::create_dir_all(nested.as_std_path()).unwrap();
@@ -1076,6 +1083,7 @@ mod tests {
 
     #[test]
     fn resolve_config_prefers_legacy_when_no_dotdev() {
+        let _guard = cwd_lock().lock().unwrap();
         let root = unique_temp_dir();
         let nested = root.join("a").join("b");
         fs::create_dir_all(nested.as_std_path()).unwrap();
@@ -1128,6 +1136,7 @@ mod tests {
 
     #[test]
     fn project_applies_chdir_and_language() {
+        let _guard = cwd_lock().lock().unwrap();
         let root = unique_temp_dir();
         let proj_dir = root.join("web");
         fs::create_dir_all(proj_dir.as_std_path()).unwrap();
