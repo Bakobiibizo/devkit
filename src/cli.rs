@@ -131,6 +131,55 @@ pub enum Command {
 pub enum DockerCommand {
     /// Generate docker/Dockerfile.core, docker-compose.yml, and .env for the current project.
     Init(DockerInitArgs),
+    /// Build docker/Dockerfile.core into the configured CORE_IMAGE tag.
+    Build(DockerBuildArgs),
+    /// Docker compose helpers.
+    Compose {
+        #[command(subcommand)]
+        command: DockerComposeCommand,
+    },
+    /// Start the compose service (build if needed) and open an interactive shell inside it.
+    #[command(alias = "dev")]
+    Develop(DockerDevelopArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct DockerDevelopArgs {
+    /// Compose service name (default: core)
+    #[arg(long = "service", default_value = "core")]
+    pub service: String,
+
+    /// Skip `docker compose up -d --build` and only exec a shell
+    #[arg(long = "no-up", default_value_t = false)]
+    pub no_up: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct DockerBuildArgs {
+    /// Override the tag to build (defaults to CORE_IMAGE from .env)
+    #[arg(long = "image")]
+    pub image: Option<String>,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum DockerComposeCommand {
+    Up {
+        #[command(subcommand)]
+        command: DockerComposeUpCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum DockerComposeUpCommand {
+    /// Run `docker compose up --build`
+    Build(DockerComposeUpBuildArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct DockerComposeUpBuildArgs {
+    /// Run in the background
+    #[arg(short = 'd', long = "detach", default_value_t = false)]
+    pub detach: bool,
 }
 
 #[derive(Args, Debug)]
@@ -144,7 +193,7 @@ pub struct DockerInitArgs {
     pub base_image: String,
 
     /// Default core image tag to write into .env (Compose override via CORE_IMAGE)
-    #[arg(long = "core-image", default_value = "devkit/core:cuda13")]
+    #[arg(long = "core-image", default_value = "bakobiibizo/devkit:cuda13")]
     pub core_image: String,
 
     /// Compose service name (default: core)

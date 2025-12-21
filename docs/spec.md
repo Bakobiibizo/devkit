@@ -19,6 +19,7 @@ dev [GLOBAL] <command> [args]
 Global:
   -C, --chdir <PATH>        Change working directory
   -f, --file <PATH>         Config path (default: ~/.dev/config.toml)
+      --project <NAME>      Select a named project from config (or use default_project)
   -l, --language <NAME>     Override default_language
   -n, --dry-run             Print commands without executing
   -v, --verbose...          Verbosity (repeatable)
@@ -27,6 +28,7 @@ Global:
 Commands:
   list                             List tasks (grouped by language/verb)
   run <task>                       Run named task or pipeline (e.g., rust_fmt, all_check)
+  start [--port <PORT>] [--prod]   Start a long-running dev server for the current project
   fmt|lint|type|test|fix|check|ci  Run verb for current or --language
   all <verb>                       Run monorepo aggregator (fmt|lint|type|test|fix|check|ci)
 
@@ -54,11 +56,32 @@ Commands:
   env diff [<REF>]                 Show diff between .env and reference (default: .env.example)
   env sync [<REF>]                 Add missing keys from reference file
 
+  docker init [--force] [--base-image <REF>] [--core-image <REF>] [--service <NAME>]
+                                    Generate docker/Dockerfile.core, docker-compose.yml, and .env
+  docker build [--image <REF>]      Build docker/Dockerfile.core tagged as CORE_IMAGE (from .env)
+  docker compose up build [-d]      Run `docker compose up --build` (optionally detached)
+  docker develop [--service <NAME>] [--no-up]
+                                    Start compose service and open an interactive shell
+  docker dev ...                    Alias for `docker develop`
+
   config                           Display config
   config check                     Validate config and display its path
   config generate <PATH> [--force] Generate <PATH> from default config 
                                     (default: ~/.dev/config.toml)
   config reload                    Reparse config and reindex tasks
+
+  setup                             Run default setup components (skip installed)
+  setup run [--skip-installed] [--no-deps] <components...>
+  setup all [--skip-installed] [--no-deps]
+  setup status
+  setup list
+  setup config
+
+  review [--output <PATH>] [--include-working] [--main]
+                                    Generate a Markdown code review overlay from git diffs
+  walk [DIR] [-o, --output <PATH>] [--format <FMT>] [--max-depth <N>] [--no-content]
+       [--extensions <EXT...>] [--include-hidden]
+                                    Generate a directory manifest (optionally with contents)
 ```
 
 ## Config format (minimal recap)

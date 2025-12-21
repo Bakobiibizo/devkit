@@ -50,7 +50,7 @@ fn render_dockerfile_core(base_image: &str) -> String {
 
 fn render_compose(service: &str) -> String {
     format!(
-        "services:\n  {service}:\n    build:\n      context: .\n      dockerfile: docker/Dockerfile.core\n    image: ${{CORE_IMAGE:-devkit/core:cuda13}}\n    container_name: devkit-core\n    working_dir: /workspace\n    volumes:\n      - .:/workspace:cached\n      - devkit-cache:/root/.cache\n    environment:\n      - NVIDIA_VISIBLE_DEVICES=all\n      - NVIDIA_DRIVER_CAPABILITIES=compute,utility\n    deploy:\n      resources:\n        reservations:\n          devices:\n            - capabilities: [gpu]\n    user: \"${{UID:-1000}}:${{GID:-1000}}\"\n    command: [\"bash\", \"-l\"]\n\nvolumes:\n  devkit-cache:\n",
+        "services:\n  {service}:\n    build:\n      context: .\n      dockerfile: docker/Dockerfile.core\n    image: ${{CORE_IMAGE:-bakobiibizo/devkit:cuda13}}\n    container_name: devkit-core\n    working_dir: /workspace\n    ipc: host\n    ulimits:\n      memlock: -1\n      stack: 67108864\n    stdin_open: true\n    tty: true\n    volumes:\n      - .:/workspace:cached\n      - devkit-cache:/root/.cache\n    environment:\n      - NVIDIA_VISIBLE_DEVICES=all\n      - NVIDIA_DRIVER_CAPABILITIES=compute,utility\n    deploy:\n      resources:\n        reservations:\n          devices:\n            - capabilities: [gpu]\n    user: \"${{UID:-1000}}:${{GID:-1000}}\"\n    command: [\"bash\", \"-l\"]\n\nvolumes:\n  devkit-cache:\n",
         service = service
     )
 }
