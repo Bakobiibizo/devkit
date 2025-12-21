@@ -7,6 +7,7 @@ mod review;
 mod runner;
 mod scaffold;
 mod setup;
+mod dockergen;
 mod tasks;
 mod versioning;
 mod walk;

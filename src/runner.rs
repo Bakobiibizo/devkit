@@ -10,13 +10,13 @@ use camino::Utf8PathBuf;
 use clap::Parser;
 
 use crate::cli::{
-    Cli, Command, ConfigCommand, EnvArgs, EnvCommand, GitCommand, InstallArgs, LanguageCommand,
-    SetupCommand, StartArgs, Verb, VersionCommand,
+    Cli, Command, ConfigCommand, DockerCommand, DockerInitArgs, EnvArgs, EnvCommand, GitCommand,
+    InstallArgs, LanguageCommand, SetupCommand, StartArgs, Verb, VersionCommand,
 };
 use crate::config::{DevConfig, TaskUpdateMode};
 use crate::envfile;
 use crate::tasks::{CommandSpec, TaskIndex};
-use crate::{config, gitops, scaffold, versioning};
+use crate::{config, dockergen, gitops, scaffold, versioning};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ConfigPathSource {
@@ -115,6 +115,7 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Git { command } => handle_git(state, command),
         Command::Version { command } => handle_version(state, command),
         Command::Env(args) => handle_env(state, args),
+        Command::Docker { command } => handle_docker(state, command),
         Command::Config { .. } => unreachable!("config commands handled earlier"),
         Command::Setup { .. } => unreachable!("setup commands handled earlier"),
         Command::Review { .. } => unreachable!("review commands handled earlier"),
@@ -123,6 +124,16 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
             bail!("unknown command: {}", extra.join(" "))
         }
     }
+}
+
+fn handle_docker(state: &AppState, command: DockerCommand) -> Result<()> {
+    match command {
+        DockerCommand::Init(args) => docker_init(state, args),
+    }
+}
+
+fn docker_init(state: &AppState, args: DockerInitArgs) -> Result<()> {
+    dockergen::init(&args, state.ctx.dry_run)
 }
 
 fn normalize_external(cli: Cli) -> Result<Cli> {

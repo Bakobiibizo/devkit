@@ -118,8 +118,38 @@ pub enum Command {
         #[arg(long = "include-hidden")]
         include_hidden: bool,
     },
+    /// Docker helpers for generating base/project containers.
+    Docker {
+        #[command(subcommand)]
+        command: DockerCommand,
+    },
     #[command(external_subcommand)]
     External(Vec<String>),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum DockerCommand {
+    /// Generate docker/Dockerfile.core, docker-compose.yml, and .env for the current project.
+    Init(DockerInitArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct DockerInitArgs {
+    /// Overwrite existing files
+    #[arg(long = "force", default_value_t = false)]
+    pub force: bool,
+
+    /// Base image to use in docker/Dockerfile.core
+    #[arg(long = "base-image", default_value = "nvcr.io/nvidia/pytorch:25.09-py3")]
+    pub base_image: String,
+
+    /// Default core image tag to write into .env (Compose override via CORE_IMAGE)
+    #[arg(long = "core-image", default_value = "devkit/core:cuda13")]
+    pub core_image: String,
+
+    /// Compose service name (default: core)
+    #[arg(long = "service", default_value = "core")]
+    pub service: String,
 }
 
 /// Shared verb enumeration for consistent handling across languages.
