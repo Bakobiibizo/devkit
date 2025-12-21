@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 2025-12-21 - v0.3.0
+
+- Describe the notable changes here.
+
+
 ## 2025-12-14 - v0.2.2
 
 - Describe the notable changes here.
