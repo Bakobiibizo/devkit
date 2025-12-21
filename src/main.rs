@@ -3,10 +3,13 @@ mod config;
 mod envfile;
 mod gitops;
 mod logging;
+mod review;
 mod runner;
 mod scaffold;
+mod setup;
 mod tasks;
 mod versioning;
+mod walk;
 
 fn main() -> anyhow::Result<()> {
     logging::init();

@@ -71,6 +71,53 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<ConfigCommand>,
     },
+    /// System setup and installation management.
+    Setup {
+        #[command(subcommand)]
+        command: Option<SetupCommand>,
+        /// Skip components that are already installed
+        #[arg(long = "skip-installed", global = true)]
+        skip_installed: bool,
+        /// Don't auto-install dependencies
+        #[arg(long = "no-deps", global = true)]
+        no_deps: bool,
+    },
+    /// Generate a Markdown code review overlay from git diffs.
+    Review {
+        /// Path to the markdown file to write
+        #[arg(long = "output")]
+        output: Option<PathBuf>,
+        /// Include unstaged working tree changes in the report
+        #[arg(long = "include-working")]
+        include_working: bool,
+        /// Compare current branch against main instead of showing staged changes
+        #[arg(long = "main")]
+        main: bool,
+    },
+    /// Generate a directory structure map with file contents (for LLM context).
+    Walk {
+        /// Directory to map (default: current directory)
+        #[arg(default_value = ".")]
+        directory: PathBuf,
+        /// Output file path (default: manifest.md)
+        #[arg(short = 'o', long = "output", default_value = "manifest.md")]
+        output: PathBuf,
+        /// Output format
+        #[arg(long = "format", default_value = "markdown")]
+        format: String,
+        /// Maximum depth to traverse
+        #[arg(long = "max-depth", default_value = "10")]
+        max_depth: u32,
+        /// Exclude file contents (include by default)
+        #[arg(long = "no-content")]
+        no_content: bool,
+        /// File extensions to include content from (e.g., .rs .py .ts)
+        #[arg(long = "extensions", num_args = 1..)]
+        extensions: Option<Vec<String>>,
+        /// Include hidden files
+        #[arg(long = "include-hidden")]
+        include_hidden: bool,
+    },
     #[command(external_subcommand)]
     External(Vec<String>),
 }
@@ -270,6 +317,32 @@ pub enum ConfigCommand {
         #[arg(long = "append", default_value_t = false)]
         append: bool,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SetupCommand {
+    /// Run default components with --skip-installed implied
+    Run {
+        /// Components to install
+        components: Vec<String>,
+        #[arg(long = "skip-installed")]
+        skip_installed: bool,
+        #[arg(long = "no-deps")]
+        no_deps: bool,
+    },
+    /// Run all compatible components
+    All {
+        #[arg(long = "skip-installed")]
+        skip_installed: bool,
+        #[arg(long = "no-deps")]
+        no_deps: bool,
+    },
+    /// Show installation status of all components
+    Status,
+    /// List available components and their dependencies
+    List,
+    /// Show effective setup configuration
+    Config,
 }
 
 /// Helper entry point so `main` can stay minimal.

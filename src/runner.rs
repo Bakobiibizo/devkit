@@ -11,7 +11,7 @@ use clap::Parser;
 
 use crate::cli::{
     Cli, Command, ConfigCommand, EnvArgs, EnvCommand, GitCommand, InstallArgs, LanguageCommand,
-    StartArgs, Verb, VersionCommand,
+    SetupCommand, StartArgs, Verb, VersionCommand,
 };
 use crate::config::{DevConfig, TaskUpdateMode};
 use crate::envfile;
@@ -66,6 +66,30 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Language {
             command: LanguageCommand::Set { name },
         } => handle_language_set(&ctx, name),
+        Command::Setup { command, skip_installed, no_deps } => {
+            handle_setup(&ctx, command, skip_installed, no_deps)
+        }
+        Command::Review { output, include_working, main } => {
+            handle_review(&ctx, output, include_working, main)
+        }
+        Command::Walk {
+            directory,
+            output,
+            format,
+            max_depth,
+            no_content,
+            extensions,
+            include_hidden,
+        } => handle_walk(
+            &ctx,
+            directory,
+            output,
+            format,
+            max_depth,
+            no_content,
+            extensions,
+            include_hidden,
+        ),
         other => {
             let state = AppState::new(ctx)?;
             handle_with_state(&state, other)
@@ -92,6 +116,9 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Version { command } => handle_version(state, command),
         Command::Env(args) => handle_env(state, args),
         Command::Config { .. } => unreachable!("config commands handled earlier"),
+        Command::Setup { .. } => unreachable!("setup commands handled earlier"),
+        Command::Review { .. } => unreachable!("review commands handled earlier"),
+        Command::Walk { .. } => unreachable!("walk commands handled earlier"),
         Command::External(extra) => {
             bail!("unknown command: {}", extra.join(" "))
         }
@@ -1288,5 +1315,171 @@ fn handle_language_set(ctx: &CliContext, name: String) -> Result<()> {
         resolved.source.as_str()
     );
     println!("Reload config to apply for this session.");
+    Ok(())
+}
+
+fn handle_walk(
+    ctx: &CliContext,
+    directory: PathBuf,
+    output: PathBuf,
+    _format: String,
+    max_depth: u32,
+    no_content: bool,
+    extensions: Option<Vec<String>>,
+    include_hidden: bool,
+) -> Result<()> {
+    use crate::walk::{WalkOptions, generate_manifest};
+
+    if ctx.dry_run {
+        println!("[dry-run] Generate manifest for {} -> {}", directory.display(), output.display());
+        return Ok(());
+    }
+
+    let opts = WalkOptions {
+        max_depth: max_depth as usize,
+        include_content: !no_content,
+        extensions,
+        ignore_hidden: !include_hidden,
+    };
+
+    println!("Generating directory manifest...");
+    let manifest = generate_manifest(&directory, opts)?;
+    
+    std::fs::write(&output, manifest)?;
+    
+    println!("Directory map generated successfully: {}", output.display());
+    
+    Ok(())
+}
+
+fn handle_review(
+    ctx: &CliContext,
+    output: Option<PathBuf>,
+    include_working: bool,
+    main: bool,
+) -> Result<()> {
+    use crate::review::{ReviewOptions, generate_review, get_repo_root};
+
+    if ctx.dry_run {
+        let output_path = output.as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| ".bako/review-report.md".to_string());
+        println!("[dry-run] Generate review report -> {}", output_path);
+        return Ok(());
+    }
+
+    let opts = ReviewOptions {
+        include_working,
+        compare_main: main,
+    };
+
+    let repo_root = get_repo_root()?;
+    
+    println!("Generating code review report...");
+    let report = generate_review(opts, &repo_root)?;
+    
+    let output_path = output.unwrap_or_else(|| {
+        PathBuf::from("review-report.md")
+    });
+    
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    
+    std::fs::write(&output_path, report)?;
+    
+    println!("Review report generated successfully: {}", output_path.display());
+    
+    Ok(())
+}
+
+fn handle_setup(
+    ctx: &CliContext,
+    command: Option<SetupCommand>,
+    root_skip_installed: bool,
+    root_no_deps: bool,
+) -> Result<()> {
+    use crate::setup::{Component, SetupConfig, SetupContext};
+
+    // Create log file path
+    let home = dirs::home_dir().context("Could not determine home directory")?;
+    let log_file = home.join(".dev").join("setup.log");
+    
+    // Ensure .dev directory exists
+    if let Some(parent) = log_file.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    // Create setup context
+    let setup_config = SetupConfig::default();
+    let setup_ctx = SetupContext::new(ctx.dry_run, Some(log_file.into()), setup_config)?;
+
+    match command {
+        None => {
+            // Default: run default components with --skip-installed implied (unless overridden)
+            let components: Result<Vec<Component>> = setup_ctx
+                .config
+                .default_components
+                .iter()
+                .map(|name| Component::from_str(name))
+                .collect();
+            
+            let components = components?;
+            // Default to skip_installed=true unless explicitly set to false via root flag
+            let skip = if root_skip_installed { true } else { true };
+            crate::setup::run_setup(&setup_ctx, components, skip, root_no_deps)?;
+        }
+        Some(SetupCommand::Run {
+            components: component_names,
+            skip_installed,
+            no_deps,
+        }) => {
+            let components: Result<Vec<Component>> = component_names
+                .iter()
+                .map(|name| Component::from_str(name))
+                .collect();
+            
+            let components = components?;
+            // Subcommand flags take precedence over root flags
+            crate::setup::run_setup(&setup_ctx, components, skip_installed, no_deps)?;
+        }
+        Some(SetupCommand::All {
+            skip_installed,
+            no_deps,
+        }) => {
+            let components = Component::all();
+            // Subcommand flags take precedence over root flags
+            crate::setup::run_setup(&setup_ctx, components, skip_installed, no_deps)?;
+        }
+        Some(SetupCommand::Status) => {
+            crate::setup::show_status(&setup_ctx)?;
+        }
+        Some(SetupCommand::List) => {
+            crate::setup::list_components()?;
+        }
+        Some(SetupCommand::Config) => {
+            println!("Setup Configuration");
+            println!("===================\n");
+            println!("Architecture: {}", setup_ctx.arch.as_str());
+            println!("Platform: {}", setup_ctx.platform.as_str());
+            println!("Package Manager: {}", setup_ctx.platform.package_manager());
+            println!("Sudo Available: {}", setup_ctx.sudo);
+            println!("\nDefault Components:");
+            for component in &setup_ctx.config.default_components {
+                println!("  - {}", component);
+            }
+            if !setup_ctx.config.skip_components.is_empty() {
+                println!("\nSkip Components:");
+                for component in &setup_ctx.config.skip_components {
+                    println!("  - {}", component);
+                }
+            }
+            println!("\nNode Version: {}", setup_ctx.config.node_version);
+            if let Some(cuda_version) = &setup_ctx.config.cuda_version {
+                println!("CUDA Version: {}", cuda_version);
+            }
+        }
+    }
+
     Ok(())
 }
