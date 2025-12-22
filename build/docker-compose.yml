@@ -1,0 +1,42 @@
+services:
+  comfy:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.core
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    image: ${CORE_IMAGE:-devkit-core:local}
+    working_dir: /workspace
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    stdin_open: true
+    tty: true
+    volumes:
+      - models:/models
+      - hf-cache:/home/dev/.cache/huggingface
+      - torch-cache:/home/dev/.cache/torch
+      - uv-cache:/home/dev/.cache/uv
+      - .:/workspace:cached
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HOME=/home/dev
+      - HF_HOME=/home/dev/.cache/huggingface
+      - TRANSFORMERS_CACHE=/home/dev/.cache/huggingface
+      - TORCH_HOME=/home/dev/.cache/torch
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    user: "${UID:-1000}:${GID:-1000}"
+    command: ["bash", "-l"]
+
+volumes:
+  models:
+  hf-cache:
+  torch-cache:
+  uv-cache:
