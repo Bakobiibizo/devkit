@@ -3,6 +3,7 @@ mod config;
 mod envfile;
 mod gitops;
 mod logging;
+mod templates;
 mod review;
 mod runner;
 mod scaffold;

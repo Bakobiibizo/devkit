@@ -298,10 +298,7 @@ fn resolve_core_image_from_env() -> Result<String> {
         }
     }
 
-    bail!(
-        "CORE_IMAGE not found in {} (run `dev docker init` or pass --image)",
-        env_path
-    )
+    Ok("devkit-core:local".to_owned())
 }
 
 fn normalize_external(cli: Cli) -> Result<Cli> {
@@ -1313,6 +1310,78 @@ fn run_process_streaming(argv: &[String]) -> Result<std::process::ExitStatus> {
         .with_context(|| format!("waiting on `{}`", format_command(argv)))
 }
 
+fn strip_compose_container_name(path: &Path) -> Result<bool> {
+    let content = match std::fs::read_to_string(path) {
+        Ok(value) => value,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(err) => return Err(err).with_context(|| format!("reading {}", path.display())),
+    };
+
+    let mut changed = false;
+    let mut out = String::with_capacity(content.len());
+    for line in content.lines() {
+        if line.trim_start().starts_with("container_name:") {
+            changed = true;
+            continue;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+
+    if !changed {
+        return Ok(false);
+    }
+
+    std::fs::write(path, out).with_context(|| format!("writing {}", path.display()))?;
+    Ok(true)
+}
+
+fn run_process_streaming_in_dir(
+    argv: &[String],
+    cwd: &Path,
+) -> Result<std::process::ExitStatus> {
+    let mut command = ProcessCommand::new(&argv[0]);
+    if argv.len() > 1 {
+        command.args(&argv[1..]);
+    }
+    command.current_dir(cwd);
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("executing `{}` in {}", format_command(argv), cwd.display()))?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let stdout_handle = stdout.map(|pipe| {
+        thread::spawn(move || {
+            for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+                println!("     stdout | {}", line);
+            }
+        })
+    });
+
+    let stderr_handle = stderr.map(|pipe| {
+        thread::spawn(move || {
+            for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+                println!("     stderr | {}", line);
+            }
+        })
+    });
+
+    if let Some(handle) = stdout_handle {
+        let _ = handle.join();
+    }
+    if let Some(handle) = stderr_handle {
+        let _ = handle.join();
+    }
+
+    child
+        .wait()
+        .with_context(|| format!("waiting on `{}`", format_command(argv)))
+}
+
 fn pipeline_for_language(config: &DevConfig, language: &str, verb: Verb) -> Option<Vec<String>> {
     let languages = config.languages.as_ref()?;
     let lang = languages.get(language)?;
@@ -1643,6 +1712,148 @@ fn handle_setup(
             let components = components?;
             // Subcommand flags take precedence over root flags
             crate::setup::run_setup(&setup_ctx, components, skip_installed, no_deps)?;
+        }
+        Some(SetupCommand::Inference {
+            service,
+            dest,
+            force,
+            no_cache,
+        }) => {
+            let home = dirs::home_dir().context("Could not determine home directory")?;
+            let default_dest = home
+                .join("repos")
+                .join("inference")
+                .join(service.trim());
+            let dest = dest.unwrap_or(default_dest);
+
+            let service = service.trim();
+            if service.is_empty() {
+                bail!("inference service name cannot be empty");
+            }
+
+            let repo = format!("dev-{}", service);
+            let repo_url = format!("https://github.com/bakobiibizo/{}.git", repo);
+
+            if ctx.dry_run {
+                println!("[dry-run] clone/update {} -> {}", repo_url, dest.display());
+                let script = dest.join("scripts").join("setup.sh");
+                let mut argv = vec!["bash".to_owned(), script.display().to_string()];
+                if no_cache {
+                    argv.push("--no-cache".to_owned());
+                }
+                println!("[dry-run] run: {} (cwd: {})", format_command(&argv), dest.display());
+                return Ok(());
+            }
+
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent).with_context(|| {
+                    format!("creating parent directory {}", parent.display())
+                })?;
+            }
+
+            if dest.exists() {
+                let git_dir = dest.join(".git");
+                if git_dir.exists() {
+                    let argv = vec![
+                        "git".to_owned(),
+                        "-C".to_owned(),
+                        dest.display().to_string(),
+                        "pull".to_owned(),
+                        "--ff-only".to_owned(),
+                    ];
+                    println!("Updating inference repo: {}", format_command(&argv));
+                    let status = run_process_streaming(&argv)?;
+                    if !status.success() {
+                        bail!(
+                            "command `{}` failed with exit code {:?}",
+                            format_command(&argv),
+                            status.code()
+                        );
+                    }
+                } else if force {
+                    println!(
+                        "[warn] removing existing destination {} (--force)",
+                        dest.display()
+                    );
+                    std::fs::remove_dir_all(&dest).with_context(|| {
+                        format!("removing {}", dest.display())
+                    })?;
+
+                    let argv = vec![
+                        "git".to_owned(),
+                        "clone".to_owned(),
+                        repo_url.clone(),
+                        dest.display().to_string(),
+                    ];
+                    println!("Cloning inference repo: {}", format_command(&argv));
+                    let status = run_process_streaming(&argv)?;
+                    if !status.success() {
+                        bail!(
+                            "command `{}` failed with exit code {:?}",
+                            format_command(&argv),
+                            status.code()
+                        );
+                    }
+                } else {
+                    bail!(
+                        "destination {} already exists; rerun with --force or pass --dest",
+                        dest.display()
+                    );
+                }
+            } else {
+                let argv = vec![
+                    "git".to_owned(),
+                    "clone".to_owned(),
+                    repo_url.clone(),
+                    dest.display().to_string(),
+                ];
+                println!("Cloning inference repo: {}", format_command(&argv));
+                let status = run_process_streaming(&argv)?;
+                if !status.success() {
+                    bail!(
+                        "command `{}` failed with exit code {:?}",
+                        format_command(&argv),
+                        status.code()
+                    );
+                }
+            }
+
+            let script = dest.join("scripts").join("setup.sh");
+            if !script.exists() {
+                bail!(
+                    "expected setup script at {} (repo contract: scripts/setup.sh)",
+                    script.display()
+                );
+            }
+
+            // Avoid cross-project container naming collisions: many repos hardcode `container_name:`.
+            // Compose already namespaces names by project; we strip explicit container names.
+            let compose_candidates = [
+                dest.join("docker-compose.yml"),
+                dest.join("docker-compose.yaml"),
+                dest.join("compose.yml"),
+                dest.join("compose.yaml"),
+            ];
+            for path in compose_candidates.iter() {
+                if strip_compose_container_name(path)? {
+                    println!("[warn] removed container_name from {}", path.display());
+                }
+            }
+
+            let mut argv = vec!["bash".to_owned(), script.display().to_string()];
+            if no_cache {
+                argv.push("--no-cache".to_owned());
+            }
+
+            println!("Running inference setup: {}", format_command(&argv));
+            let status = run_process_streaming_in_dir(&argv, &dest)?;
+            if !status.success() {
+                bail!(
+                    "command `{}` failed with exit code {:?}",
+                    format_command(&argv),
+                    status.code()
+                );
+            }
         }
         Some(SetupCommand::All {
             skip_installed,

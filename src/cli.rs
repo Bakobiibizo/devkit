@@ -192,10 +192,6 @@ pub struct DockerInitArgs {
     #[arg(long = "base-image", default_value = "nvcr.io/nvidia/pytorch:25.09-py3")]
     pub base_image: String,
 
-    /// Default core image tag to write into .env (Compose override via CORE_IMAGE)
-    #[arg(long = "core-image", default_value = "bakobiibizo/devkit:cuda13")]
-    pub core_image: String,
-
     /// Compose service name (default: core)
     #[arg(long = "service", default_value = "core")]
     pub service: String,
@@ -408,6 +404,16 @@ pub enum SetupCommand {
         skip_installed: bool,
         #[arg(long = "no-deps")]
         no_deps: bool,
+    },
+    Inference {
+        #[arg()]
+        service: String,
+        #[arg(long = "dest")]
+        dest: Option<PathBuf>,
+        #[arg(long = "force", default_value_t = false)]
+        force: bool,
+        #[arg(long = "no-cache", default_value_t = false)]
+        no_cache: bool,
     },
     /// Run all compatible components
     All {
