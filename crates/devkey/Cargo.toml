@@ -1,0 +1,32 @@
+[package]
+name = "devkey"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+dirs.workspace = true
+serde.workspace = true
+toml.workspace = true
+
+# Windows APIs for hotkeys, SendInput, clipboard
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_DataExchange",
+    "Win32_Foundation",
+    "Win32_System_LibraryLoader",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Memory",
+]}
+
+# GUI framework - iced for custom styling
+iced = { version = "0.13", features = ["tokio"] }
+
+# System tray
+tray-icon = "0.19"
+
+# Async runtime
+tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros"] }

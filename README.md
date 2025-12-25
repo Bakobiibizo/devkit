@@ -1,6 +1,12 @@
-# dev
+# devkit
 
-`dev` is a single-binary Rust CLI for unified developer workflows:
+A unified developer workflow toolkit for Rust, Python, and TypeScript projects.
+
+## Components
+
+### `dev` CLI
+
+A single-binary Rust CLI for unified developer workflows:
 
 - Config-driven task runner (pipelines: `fmt`, `lint`, `type`, `test`, `fix`, `check`, `ci`)
 - Language scaffolding + provisioning (`dev install`)
@@ -11,15 +17,38 @@
 - Dockerized GPU dev containers (`dev docker ...`)
 - Review overlays and directory manifests (`dev review`, `dev walk`)
 
+### `devkey` (Windows only)
+
+A hotkey-triggered popup for quick access to environment variables and dev tasks. Press `Ctrl+;` to open.
+
 For the authoritative spec, see `docs/spec.md`.
 
 ## Install
 
-From this repo:
+### From crates.io
 
 ```bash
-cargo install --path .
+cargo install devkit-cli
 ```
+
+### From source
+
+```bash
+# Clone the repo
+git clone https://github.com/bakobiibizo/devkit
+cd devkit
+
+# Install dev CLI
+cargo install --path crates/dev
+
+# (Windows only) Build devkey
+cargo build --release -p devkey
+# Binary at target/release/devkey.exe
+```
+
+### Prebuilt binaries
+
+Download from [GitHub Releases](https://github.com/bakobiibizo/devkit/releases).
 
 ## Quick usage
 
