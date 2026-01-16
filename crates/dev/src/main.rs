@@ -10,6 +10,7 @@ mod scaffold;
 mod setup;
 mod dockergen;
 mod tasks;
+mod vault;
 mod versioning;
 mod walk;
 

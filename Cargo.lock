@@ -956,6 +956,7 @@ dependencies = [
  "dirs 5.0.1",
  "iced",
  "serde",
+ "serde_json",
  "tokio",
  "toml",
  "tray-icon",

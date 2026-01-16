@@ -4,7 +4,16 @@
       "Bash(cargo check:*)",
       "Bash(cargo build:*)",
       "Bash(ls:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(cargo run:*)",
+      "Bash(cat:*)",
+      "Bash(where:*)",
+      "Bash(powershell -Command \"Get-Command op -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
+      "Bash(powershell:*)",
+      "Bash(cargo install:*)",
+      "Bash(dev vault list:*)",
+      "Bash(taskkill:*)",
+      "Bash(dev vault set:*)"
     ]
   }
 }

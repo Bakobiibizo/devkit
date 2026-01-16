@@ -8,8 +8,10 @@ const RUFF: &str = "ruff.toml";
 const MYPY: &str = "mypy.ini";
 const PRECOMMIT: &str = ".pre-commit-config.yaml";
 const CI_WORKFLOW: &str = ".github/workflows/ci.yml";
+const GITIGNORE: &str = ".gitignore";
 
 pub fn install() -> Result<()> {
+    ensure_file(GITIGNORE, "python/.gitignore")?;
     ensure_file(RUFF, "python/ruff.toml")?;
     ensure_file(MYPY, "python/mypy.ini")?;
     ensure_file(PRECOMMIT, "python/pre-commit-config.yaml")?;

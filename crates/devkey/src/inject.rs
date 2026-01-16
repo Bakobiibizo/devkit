@@ -120,8 +120,50 @@ unsafe fn send_paste() -> Result<()> {
     }
 }
 
+/// Read text from clipboard
+#[cfg(windows)]
+pub fn read_clipboard() -> Result<String> {
+    unsafe {
+        if OpenClipboard(HWND::default()).is_err() {
+            return Err(anyhow::anyhow!("Failed to open clipboard"));
+        }
+
+        let handle = GetClipboardData(CF_UNICODETEXT);
+        if handle.is_err() {
+            let _ = CloseClipboard();
+            return Err(anyhow::anyhow!("No text in clipboard"));
+        }
+
+        let handle = handle.unwrap();
+        let ptr = GlobalLock(HGLOBAL(handle.0)) as *const u16;
+        if ptr.is_null() {
+            let _ = CloseClipboard();
+            return Err(anyhow::anyhow!("Failed to lock clipboard memory"));
+        }
+
+        // Find null terminator and convert to String
+        let mut len = 0;
+        while *ptr.add(len) != 0 {
+            len += 1;
+        }
+
+        let slice = std::slice::from_raw_parts(ptr, len);
+        let text = String::from_utf16_lossy(slice);
+
+        let _ = GlobalUnlock(HGLOBAL(handle.0));
+        let _ = CloseClipboard();
+
+        Ok(text)
+    }
+}
+
 #[cfg(not(windows))]
 pub fn copy_to_clipboard(_text: &str) -> Result<()> {
+    Err(anyhow::anyhow!("Clipboard only supported on Windows"))
+}
+
+#[cfg(not(windows))]
+pub fn read_clipboard() -> Result<String> {
     Err(anyhow::anyhow!("Clipboard only supported on Windows"))
 }
 

@@ -82,6 +82,15 @@ Commands:
   walk [DIR] [-o, --output <PATH>] [--format <FMT>] [--max-depth <N>] [--no-content]
        [--extensions <EXT...>] [--include-hidden]
                                     Generate a directory manifest (optionally with contents)
+
+  vault list [--account production|development]
+                                    List password items in a vault
+  vault get <item> [--field <name>] [--account ...]
+                                    Get a secret value
+  vault set <item> <value> [--account ...]
+                                    Create or update a secret
+  vault delete <item> [--account ...]
+                                    Delete a secret
 ```
 
 ## Config format (minimal recap)
@@ -245,6 +254,83 @@ allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "ISC"]
 * `dev env init` copies `.env.example` to `.env` if `.env` doesn't exist.
 * `dev env diff [ref]` compares `.env` against a reference file (default: `.env.example`).
 * `dev env sync [ref]` adds missing keys from reference file to `.env`.
+
+## 1Password Vault Integration
+
+Manage secrets via 1Password CLI (`op`) with service account tokens.
+
+### CLI Commands
+
+```
+dev vault list [--account production|development]
+                                    List password items in a vault
+dev vault get <item> [--field <name>] [--account ...]
+                                    Get a secret value (default field: password)
+dev vault set <item> <value> [--account ...]
+                                    Create or update a secret
+dev vault delete <item> [--account ...]
+                                    Delete a secret from the vault
+```
+
+### Service Account Configuration
+
+Store service account tokens in `~/.env`:
+
+```
+OP_PRODUCTION=ops_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OP_DEVELOPMENT=ops_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+The `--account` flag selects which vault to use:
+- `production` uses `OP_PRODUCTION` token
+- `development` uses `OP_DEVELOPMENT` token (default)
+
+### GitHub Actions Integration
+
+Use the 1Password CLI in CI workflows to access secrets securely:
+
+```yaml
+# .github/workflows/deploy.yml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install 1Password CLI
+        run: |
+          curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+            sudo gpg --dearmor -o /usr/share/keyrings/1password-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] \
+            https://downloads.1password.com/linux/debian/amd64 stable main" | \
+            sudo tee /etc/apt/sources.list.d/1password.list
+          sudo apt update && sudo apt install -y 1password-cli
+
+      - name: Load secrets and deploy
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_PRODUCTION }}
+        run: |
+          # Read secrets from 1Password
+          export API_KEY=$(op read "op://production/api-credentials/password")
+          export DB_PASSWORD=$(op read "op://production/database/password")
+
+          # Use secrets in deployment
+          ./deploy.sh
+```
+
+Store your service account token as a GitHub secret (`OP_PRODUCTION` or `OP_DEVELOPMENT`).
+
+### Setup Component
+
+Install the 1Password CLI via `dev setup`:
+
+```bash
+dev setup run op
+```
+
+This installs:
+- **Windows**: `winget install AgileBits.1Password.CLI`
+- **Linux**: Adds 1Password apt repository and installs `1password-cli`
 
 ## Project layout (single crate)
 

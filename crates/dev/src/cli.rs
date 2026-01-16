@@ -123,6 +123,11 @@ pub enum Command {
         #[command(subcommand)]
         command: DockerCommand,
     },
+    /// 1Password vault operations for managing secrets.
+    Vault {
+        #[command(subcommand)]
+        command: VaultCommand,
+    },
     #[command(external_subcommand)]
     External(Vec<String>),
 }
@@ -428,6 +433,45 @@ pub enum SetupCommand {
     List,
     /// Show effective setup configuration
     Config,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum VaultCommand {
+    /// List secrets in a vault
+    List {
+        /// Vault to list from (production or development)
+        #[arg(long = "account", default_value = "development")]
+        account: String,
+    },
+    /// Get a secret value
+    Get {
+        /// Secret name or path
+        item: String,
+        /// Specific field to extract
+        #[arg(long = "field")]
+        field: Option<String>,
+        /// Vault account (production or development)
+        #[arg(long = "account", default_value = "development")]
+        account: String,
+    },
+    /// Create or update a secret
+    Set {
+        /// Secret name
+        item: String,
+        /// Secret value
+        value: String,
+        /// Vault account (production or development)
+        #[arg(long = "account", default_value = "development")]
+        account: String,
+    },
+    /// Delete a secret
+    Delete {
+        /// Secret name
+        item: String,
+        /// Vault account (production or development)
+        #[arg(long = "account", default_value = "development")]
+        account: String,
+    },
 }
 
 /// Helper entry point so `main` can stay minimal.

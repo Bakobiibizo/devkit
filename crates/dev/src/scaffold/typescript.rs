@@ -9,8 +9,10 @@ const TSCONFIG: &str = "tsconfig.json";
 const VITEST: &str = "vitest.config.ts";
 const PRETTIER: &str = ".prettierrc.json";
 const CI_WORKFLOW: &str = ".github/workflows/ci.yml";
+const GITIGNORE: &str = ".gitignore";
 
 pub fn install() -> Result<()> {
+    ensure_file(GITIGNORE, "typescript/.gitignore")?;
     ensure_file(ESLINT, "typescript/eslint.config.ts")?;
     ensure_file(TSCONFIG, "typescript/tsconfig.json")?;
     ensure_file(VITEST, "typescript/vitest.config.ts")?;

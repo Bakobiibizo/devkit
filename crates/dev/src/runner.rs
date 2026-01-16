@@ -12,12 +12,13 @@ use clap::Parser;
 use crate::cli::{
     Cli, Command, ConfigCommand, DockerBuildArgs, DockerCommand, DockerComposeCommand,
     DockerComposeUpCommand, DockerComposeUpBuildArgs, DockerInitArgs, EnvArgs, EnvCommand,
-    GitCommand, InstallArgs, LanguageCommand, SetupCommand, StartArgs, Verb, VersionCommand,
+    GitCommand, InstallArgs, LanguageCommand, SetupCommand, StartArgs, VaultCommand, Verb,
+    VersionCommand,
 };
 use crate::config::{DevConfig, TaskUpdateMode};
 use crate::envfile;
 use crate::tasks::{CommandSpec, TaskIndex};
-use crate::{config, dockergen, gitops, scaffold, versioning};
+use crate::{config, dockergen, gitops, scaffold, vault, versioning};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ConfigPathSource {
@@ -136,6 +137,7 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Version { command } => handle_version(state, command),
         Command::Env(args) => handle_env(state, args),
         Command::Docker { command } => handle_docker(state, command),
+        Command::Vault { command } => handle_vault(state, command),
         Command::Config { .. } => unreachable!("config commands handled earlier"),
         Command::Setup { .. } => unreachable!("setup commands handled earlier"),
         Command::Review { .. } => unreachable!("review commands handled earlier"),
@@ -524,6 +526,21 @@ fn handle_env(state: &AppState, args: EnvArgs) -> Result<()> {
         Some(EnvCommand::Template) => env_template(state),
         Some(EnvCommand::Diff { reference }) => env_diff(state, &reference),
         Some(EnvCommand::Sync { reference }) => env_sync(state, &reference),
+    }
+}
+
+fn handle_vault(state: &AppState, command: VaultCommand) -> Result<()> {
+    match command {
+        VaultCommand::List { account } => vault::list_items(&account, state.ctx.dry_run),
+        VaultCommand::Get { item, field, account } => {
+            vault::get_item(&account, &item, field.as_deref(), state.ctx.dry_run)
+        }
+        VaultCommand::Set { item, value, account } => {
+            vault::set_item(&account, &item, &value, state.ctx.dry_run)
+        }
+        VaultCommand::Delete { item, account } => {
+            vault::delete_item(&account, &item, state.ctx.dry_run)
+        }
     }
 }
 

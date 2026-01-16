@@ -1,8 +1,6 @@
 //! Windows global hotkey listener for CTRL+;
 
-use crate::AppMessage;
 use anyhow::Result;
-use std::sync::mpsc::Sender;
 
 #[cfg(windows)]
 use windows::{
@@ -14,7 +12,7 @@ use windows::{
 const HOTKEY_ID: i32 = 1;
 
 #[cfg(windows)]
-pub fn run_hotkey_listener(tx: Sender<AppMessage>) -> Result<()> {
+pub fn run_hotkey_listener() -> Result<()> {
     unsafe {
         // VK_OEM_1 is the semicolon key (;)
         RegisterHotKey(
@@ -38,7 +36,7 @@ pub fn run_hotkey_listener(tx: Sender<AppMessage>) -> Result<()> {
             }
 
             if msg.message == WM_HOTKEY && msg.wParam.0 as i32 == HOTKEY_ID {
-                let _ = tx.send(AppMessage::ShowWindow);
+                crate::window::request_show();
             }
 
             let _ = TranslateMessage(&msg);
@@ -52,6 +50,6 @@ pub fn run_hotkey_listener(tx: Sender<AppMessage>) -> Result<()> {
 }
 
 #[cfg(not(windows))]
-pub fn run_hotkey_listener(_tx: Sender<AppMessage>) -> Result<()> {
+pub fn run_hotkey_listener() -> Result<()> {
     Err(anyhow::anyhow!("Global hotkeys only supported on Windows"))
 }

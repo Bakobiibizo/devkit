@@ -313,3 +313,112 @@ rm() {
 
     Ok(())
 }
+
+/// Detect 1Password CLI
+pub fn detect_op(ctx: &SetupContext) -> Result<InstallState> {
+    if ctx.command_exists("op") {
+        let output = std::process::Command::new("op")
+            .arg("--version")
+            .output()?;
+
+        if output.status.success() {
+            let version = String::from_utf8_lossy(&output.stdout);
+            let version_str = version.trim().to_string();
+            Ok(InstallState::Installed {
+                version: Some(version_str),
+                details: vec![],
+            })
+        } else {
+            Ok(InstallState::NotInstalled)
+        }
+    } else {
+        Ok(InstallState::NotInstalled)
+    }
+}
+
+/// Install 1Password CLI
+pub fn install_op(ctx: &SetupContext) -> Result<()> {
+    let component = "op";
+
+    ctx.log.ok(component, "Installing 1Password CLI");
+
+    #[cfg(target_os = "windows")]
+    {
+        if ctx.dry_run {
+            ctx.log.dry_run(component, "winget install AgileBits.1Password.CLI");
+            return Ok(());
+        }
+
+        let output = std::process::Command::new("winget")
+            .args(["install", "-e", "--id", "AgileBits.1Password.CLI"])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to install 1Password CLI: {}", stderr);
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if !ctx.command_exists("curl") {
+            anyhow::bail!("curl is required but not installed");
+        }
+
+        ctx.log.ok(component, "Adding 1Password repository");
+
+        if !ctx.dry_run {
+            // Add GPG key
+            let output = std::process::Command::new("sh")
+                .arg("-c")
+                .arg("curl -sS https://downloads.1password.com/linux/keys/1password.asc | sudo gpg --dearmor -o /usr/share/keyrings/1password-archive-keyring.gpg")
+                .output()?;
+
+            if !output.status.success() {
+                anyhow::bail!("Failed to add 1Password GPG key");
+            }
+
+            // Add repository
+            let arch = std::process::Command::new("dpkg")
+                .arg("--print-architecture")
+                .output()?;
+            let arch_str = String::from_utf8_lossy(&arch.stdout).trim().to_string();
+
+            let repo_line = format!(
+                "deb [arch={} signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/{} stable main",
+                arch_str, arch_str
+            );
+
+            let output = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(format!("echo '{}' | sudo tee /etc/apt/sources.list.d/1password.list", repo_line))
+                .output()?;
+
+            if !output.status.success() {
+                anyhow::bail!("Failed to add 1Password repository");
+            }
+        } else {
+            ctx.log.dry_run(component, "Add 1Password repository");
+        }
+
+        ctx.execute(
+            component,
+            std::process::Command::new("sudo")
+                .arg("apt")
+                .arg("update"),
+        )?;
+
+        ctx.log.ok(component, "Installing 1password-cli");
+
+        ctx.execute(
+            component,
+            std::process::Command::new("sudo")
+                .args(["apt", "install", "-y", "1password-cli"]),
+        )?;
+    }
+
+    ctx.log.ok(component, "1Password CLI installed successfully");
+    ctx.log.warn(component, "Configure service account tokens in ~/.env as OP_PRODUCTION and OP_DEVELOPMENT");
+
+    Ok(())
+}
