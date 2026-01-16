@@ -1,0 +1,121 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Devkit is a Rust workspace containing two crates:
+- **`dev` (crates/dev)**: A unified CLI for developer workflows across Rust, Python, and TypeScript projects
+- **`devkey` (crates/devkey)**: A Windows-only hotkey popup for quick access to env vars and dev tasks (Ctrl+;)
+
+## Build & Development Commands
+
+```bash
+# Build entire workspace
+cargo build --workspace
+
+# Build individual crates
+cargo build -p devkit-cli    # dev CLI
+cargo build -p devkey        # Windows hotkey tool
+
+# Install dev CLI locally
+cargo install --path crates/dev
+
+# Run without installing
+cargo run -p devkit-cli -- <args>
+
+# Tests
+cargo test --workspace
+
+# Check, lint, format
+cargo check --workspace
+cargo clippy --workspace
+cargo fmt --workspace
+
+# Security/license auditing (requires tools installed)
+cargo audit
+cargo deny check
+cargo +nightly udeps
+```
+
+## Architecture
+
+### dev CLI (crates/dev)
+
+The CLI follows a config-driven task runner pattern:
+
+```
+src/
+├── main.rs          # Entry: logging init → cli parse → runner
+├── cli.rs           # Clap definitions for all commands
+├── config.rs        # Loads ~/.dev/config.toml with serde + toml_edit
+├── tasks.rs         # Task indexing, flattening, cycle detection
+├── runner.rs        # Command execution, dry-run, status logging
+├── envfile.rs       # .env file read/write with profile support
+├── gitops.rs        # Git branch workflows, release PRs
+├── versioning.rs    # Version bump, changelog, tagging
+├── dockergen.rs     # Docker file generation and compose helpers
+├── review.rs        # Git diff → markdown review overlay
+├── walk.rs          # Directory manifests for LLM context
+├── templates.rs     # rust-embed template handling
+├── scaffold/        # Language-specific scaffolding (rust, python, typescript)
+└── setup/           # System setup components (14 components: docker, cuda, node, etc.)
+```
+
+**Key patterns:**
+- Config uses `toml_edit` to preserve comments on write
+- Tasks can reference other tasks; flattening resolves refs with cycle detection
+- Templates embedded via `rust-embed` from `templates/` directory
+- Setup components implement `detect() -> InstallState` and `install()` contract
+- Output uses `[ok]/[warn]/[error]` markers for feedback
+
+### devkey (crates/devkey)
+
+Windows tray application with global hotkey:
+- `hotkey.rs` - Windows API hotkey registration
+- `window.rs` - iced GUI popup
+- `env.rs` - Environment variable loading
+- `inject.rs` - SendInput for text injection
+- `menu.rs` - Tray menu handling
+
+## Config Structure
+
+The CLI reads from `~/.dev/config.toml`:
+- `default_language` - rust/python/typescript
+- `[tasks.<name>]` - Commands as arrays or task refs
+- `[languages.<name>.pipelines]` - Maps verbs (fmt/lint/type/test/fix/check/ci) to tasks
+- `[git]` - Branch naming, version file location
+- `[env]` - Required/optional env vars for validation
+- `[setup]` - Default components, skip list, versions
+
+See `docs/example.config.toml` for full reference.
+
+## CLI Verb Dispatch
+
+Standard verbs dispatch through language pipelines:
+```bash
+dev fmt              # runs [languages.<default>.pipelines.fmt]
+dev lint -l python   # runs python lint pipeline
+dev all check        # runs all_check task (all languages)
+```
+
+## Testing
+
+Container-based test framework in `.test/`:
+```bash
+# Run basic tests in Docker
+.test/run-basic-tests.sh
+
+# Manual testing
+cargo run -p devkit-cli -- setup status
+cargo run -p devkit-cli -- config check
+```
+
+## Key Dependencies
+
+- `clap` with derive - CLI parsing
+- `serde` + `toml` + `toml_edit` - Config handling
+- `rust-embed` - Template embedding
+- `anyhow` - Error handling
+- `tracing` - Logging
+- `iced` + `windows` crate - devkey GUI (Windows only)
