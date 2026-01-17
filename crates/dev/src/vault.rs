@@ -89,12 +89,24 @@ pub fn list_items(account: &str, dry_run: bool) -> Result<()> {
             return Ok(());
         }
 
+        let mut entries: Vec<(String, String)> = arr
+            .iter()
+            .filter_map(|item| {
+                let title = item.get("title").and_then(|v| v.as_str())?.to_string();
+                let id = item
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?")
+                    .to_string();
+                Some((title, id))
+            })
+            .collect();
+
+        entries.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+
         println!("Secrets in {} vault:", account);
-        for item in arr {
-            if let Some(title) = item.get("title").and_then(|v| v.as_str()) {
-                let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-                println!("  {} ({})", title, id);
-            }
+        for (title, id) in entries {
+            println!("  {} ({})", title, id);
         }
     }
 
@@ -123,6 +135,7 @@ pub fn get_item(account: &str, item: &str, field: Option<&str>, dry_run: bool) -
             account,
             "--fields",
             &format!("label={}", field_name),
+            "--reveal",
         ],
     )?;
 
