@@ -25,6 +25,28 @@ pub struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
+pub enum KubeCommand {
+    /// Show kube helper usage and examples.
+    Help,
+    /// List kubeconfig contexts with the current one marked.
+    Contexts,
+    /// Switch to a kubeconfig context.
+    Use {
+        /// Context name (as shown in `kube contexts`).
+        context: String,
+    },
+    /// Show the current kubeconfig context.
+    Current,
+    /// List namespaces in the current context.
+    Namespaces,
+    /// Set the default namespace on the current context.
+    SetNamespace {
+        /// Namespace to set as default for the current context.
+        namespace: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 pub enum Command {
     /// List available tasks and pipelines.
     List,
@@ -122,6 +144,11 @@ pub enum Command {
     Docker {
         #[command(subcommand)]
         command: DockerCommand,
+    },
+    /// Kubernetes helpers (contexts, namespaces, quick info)
+    Kube {
+        #[command(subcommand)]
+        command: KubeCommand,
     },
     /// 1Password vault operations for managing secrets.
     Vault {

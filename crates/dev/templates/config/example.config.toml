@@ -253,6 +253,18 @@ commands = ["rust_check", "py_check", "ts_check"]
 # Heavier CI gate that includes extras like audit/deny/udeps and hygiene.
 commands = ["rust_ci", "py_ci", "ts_ci"]
 
+# ===================== ngrok ========================
+# Starts ngrok with GitHub OAuth credentials loaded from 1Password.
+# Requires: ~/.env with OP_PRODUCTION service account token
+# Requires: ~/.dev/scripts/ngrok-start.sh (installed by dev setup)
+# Requires: ngrok config at ~/.config/ngrok/ngrok.yml with ${GITHUB_CLIENT_ID} and ${GITHUB_CLIENT_SECRET}
+
+[tasks.ngrok]
+commands = [["bash", "-lc", '''
+pm2 delete ngrok 2>/dev/null || true
+pm2 start ~/.dev/scripts/ngrok-start.sh --name ngrok
+''']]
+
 # ===================== Git ========================
 
 [git]

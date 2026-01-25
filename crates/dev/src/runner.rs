@@ -12,8 +12,8 @@ use clap::Parser;
 use crate::cli::{
     Cli, Command, ConfigCommand, DockerBuildArgs, DockerCommand, DockerComposeCommand,
     DockerComposeUpCommand, DockerComposeUpBuildArgs, DockerInitArgs, EnvArgs, EnvCommand,
-    GitCommand, InstallArgs, LanguageCommand, SetupCommand, StartArgs, VaultCommand, Verb,
-    VersionCommand,
+    GitCommand, InstallArgs, KubeCommand, LanguageCommand, SetupCommand, StartArgs, VaultCommand,
+    Verb, VersionCommand,
 };
 use crate::config::{DevConfig, TaskUpdateMode};
 use crate::envfile;
@@ -55,6 +55,44 @@ fn should_scaffold_in_cwd(language: &str) -> bool {
         "python" => !Path::new("pyproject.toml").exists(),
         "rust" => !Path::new("Cargo.toml").exists(),
         _ => true,
+    }
+}
+
+fn handle_kube(state: &AppState, command: KubeCommand) -> Result<()> {
+    match command {
+        KubeCommand::Help => {
+            println!(
+                "\nKubernetes helper commands:\n  dev kube help                      Show this help\n  dev kube contexts                  List kubeconfig contexts (marks current with *)\n  dev kube use <context>             Switch to a kube context\n  dev kube current                   Show current kube context\n  dev kube namespaces                List namespaces in current context\n  dev kube set-namespace <ns>        Set default namespace on current context\n\nExamples:\n  dev kube contexts\n  dev kube use dev-cluster\n  dev kube set-namespace inference\n  dev kube namespaces\n"
+            );
+            Ok(())
+        }
+        KubeCommand::Contexts => kube_cmd(&["kubectl", "config", "get-contexts"], state),
+        KubeCommand::Use { context } => {
+            kube_cmd(&["kubectl", "config", "use-context", context.as_str()], state)
+        }
+        KubeCommand::Current => kube_cmd(&["kubectl", "config", "current-context"], state),
+        KubeCommand::Namespaces => kube_cmd(&["kubectl", "get", "namespaces"], state),
+        KubeCommand::SetNamespace { namespace } => kube_cmd(
+            &["kubectl", "config", "set-context", "--current", "--namespace", namespace.as_str()],
+            state,
+        ),
+    }
+}
+
+fn kube_cmd(argv: &[&str], state: &AppState) -> Result<()> {
+    let printable = argv.join(" ");
+    println!("{}", printable);
+    if state.ctx.dry_run {
+        println!("    (dry-run) skipped");
+        return Ok(());
+    }
+
+    let argv_owned: Vec<String> = argv.iter().map(|s| (*s).to_owned()).collect();
+    let status = run_process(&argv_owned)?;
+    if status.success() {
+        Ok(())
+    } else {
+        bail!("command `{}` failed with exit code {:?}", printable, status.code())
     }
 }
 
@@ -137,6 +175,7 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Version { command } => handle_version(state, command),
         Command::Env(args) => handle_env(state, args),
         Command::Docker { command } => handle_docker(state, command),
+        Command::Kube { command } => handle_kube(state, command),
         Command::Vault { command } => handle_vault(state, command),
         Command::Config { .. } => unreachable!("config commands handled earlier"),
         Command::Setup { .. } => unreachable!("setup commands handled earlier"),
@@ -1650,7 +1689,7 @@ fn handle_review(
     if ctx.dry_run {
         let output_path = output.as_ref()
             .map(|p| p.display().to_string())
-            .unwrap_or_else(|| ".bako/review-report.md".to_string());
+            .unwrap_or_else(|| "diff.md".to_string());
         println!("[dry-run] Generate review report -> {}", output_path);
         return Ok(());
     }
@@ -1665,9 +1704,7 @@ fn handle_review(
     println!("Generating code review report...");
     let report = generate_review(opts, &repo_root)?;
     
-    let output_path = output.unwrap_or_else(|| {
-        PathBuf::from("review-report.md")
-    });
+    let output_path = output.unwrap_or_else(|| PathBuf::from("diff.md"));
     
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)?;
