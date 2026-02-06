@@ -155,8 +155,23 @@ pub enum Command {
         #[command(subcommand)]
         command: VaultCommand,
     },
+    /// Switch devkit config between OS platforms (Windows/Linux/macOS).
+    Os {
+        #[command(subcommand)]
+        command: OsCommand,
+    },
     #[command(external_subcommand)]
     External(Vec<String>),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum OsCommand {
+    /// Switch to Windows configuration (uses npx.cmd, .cmd extensions).
+    Windows,
+    /// Switch to Linux/macOS configuration (uses npx, no extensions).
+    Linux,
+    /// Show current OS configuration.
+    Show,
 }
 
 #[derive(Subcommand, Debug)]

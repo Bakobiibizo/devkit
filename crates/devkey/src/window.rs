@@ -3,7 +3,7 @@
 //! Uses a daemon-style architecture where the iced app runs continuously
 //! and windows are opened/closed via messages from the hotkey thread.
 
-use crate::menu::{MenuItem, MenuState};
+use crate::menu::{LoadedSecrets, MenuItem, MenuState};
 use iced::keyboard::{self, Key};
 use iced::widget::{column, container, scrollable, text, Column};
 use iced::{
@@ -35,6 +35,7 @@ pub enum Message {
     KeyPressed(window::Id, Key, Option<String>),
     WindowFocusLost(window::Id),
     WindowOpened(window::Id),
+    SecretsLoaded(LoadedSecrets),
 }
 
 struct DevKey {
@@ -62,8 +63,8 @@ impl DevKey {
                         // Save foreground window before showing our popup
                         crate::focus::save_foreground_window();
 
-                        // Open a new popup window
-                        let (id, task) = window::open(window::Settings {
+                        // Open a new popup window immediately (no blocking)
+                        let (id, open_task) = window::open(window::Settings {
                             size: Size::new(300.0, 400.0),
                             position: window::Position::Centered,
                             decorations: false,
@@ -73,7 +74,27 @@ impl DevKey {
                         });
 
                         self.windows.insert(id, MenuState::new());
-                        return task.map(move |_| Message::WindowOpened(id));
+
+                        // Fetch secrets on a background thread so the window
+                        // appears instantly and secrets hydrate when ready.
+                        let secrets_task = Task::perform(
+                            async {
+                                tokio::task::spawn_blocking(
+                                    crate::menu::fetch_secrets_blocking,
+                                )
+                                .await
+                                .unwrap_or_else(|_| LoadedSecrets {
+                                    production: Vec::new(),
+                                    development: Vec::new(),
+                                })
+                            },
+                            Message::SecretsLoaded,
+                        );
+
+                        return Task::batch([
+                            open_task.map(move |_| Message::WindowOpened(id)),
+                            secrets_task,
+                        ]);
                     }
                 }
                 Task::none()
@@ -191,6 +212,13 @@ impl DevKey {
                         }
                     }
                     _ => {}
+                }
+                Task::none()
+            }
+            Message::SecretsLoaded(loaded) => {
+                // Hydrate secrets into all open windows
+                for menu in self.windows.values_mut() {
+                    menu.hydrate_secrets(loaded.clone());
                 }
                 Task::none()
             }

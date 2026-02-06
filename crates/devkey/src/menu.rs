@@ -1,5 +1,6 @@
 //! Menu state machine for navigation
 
+use crate::secrets::SecretItem;
 use std::path::PathBuf;
 
 #[cfg(windows)]
@@ -7,6 +8,13 @@ use std::os::windows::process::CommandExt;
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+/// Secrets loaded from a background thread, ready to hydrate into the menu.
+#[derive(Debug, Clone)]
+pub struct LoadedSecrets {
+    pub production: Vec<SecretItem>,
+    pub development: Vec<SecretItem>,
+}
 
 #[derive(Debug, Clone)]
 pub enum MenuItem {
@@ -68,6 +76,68 @@ impl MenuState {
             input_name: String::new(),
             input_value: String::new(),
             reveal_value: false,
+        }
+    }
+
+    /// Replace the "Loading secrets..." placeholder with actual secret items.
+    /// Updates both root_items and the current view if the user is still
+    /// looking at the top-level or secrets submenu.
+    pub fn hydrate_secrets(&mut self, loaded: LoadedSecrets) {
+        // Build the full secrets menu items
+        let mut secrets_items: Vec<MenuItem> = vec![
+            MenuItem::Command {
+                name: "+ Add to PROD".to_string(),
+                task: "vault-add-prod".to_string(),
+            },
+            MenuItem::Command {
+                name: "+ Add to DEV".to_string(),
+                task: "vault-add-dev".to_string(),
+            },
+        ];
+
+        for s in loaded.production {
+            secrets_items.push(MenuItem::Secret {
+                name: s.title,
+                account: "production".to_string(),
+                item_id: s.id,
+            });
+        }
+        for s in loaded.development {
+            secrets_items.push(MenuItem::Secret {
+                name: s.title,
+                account: "development".to_string(),
+                item_id: s.id,
+            });
+        }
+
+        // Update the secrets submenu in root_items
+        for item in &mut self.root_items {
+            if let MenuItem::Submenu { name, items } = item {
+                if name == "secrets" {
+                    *items = secrets_items.clone();
+                    break;
+                }
+            }
+        }
+
+        // If the user is currently viewing the secrets submenu, update live
+        if self.breadcrumb.last().map(|s| s.as_str()) == Some("secrets") {
+            // Preserve the Back item at position 0, replace the rest
+            let mut new_items = vec![MenuItem::Back];
+            new_items.extend(secrets_items);
+            self.items = new_items;
+            // Clamp selection to valid range
+            if self.selected >= self.items.len() {
+                self.selected = self.items.len().saturating_sub(1);
+            }
+        }
+
+        // If still at root level, rebuild from root_items so the submenu ref is current
+        if self.breadcrumb.len() == 1 {
+            self.items = self.root_items.clone();
+            if self.selected >= self.items.len() {
+                self.selected = self.items.len().saturating_sub(1);
+            }
         }
     }
 
@@ -323,8 +393,8 @@ fn build_root_menu() -> Vec<MenuItem> {
         });
     }
 
-    // Secrets submenu - always show (has add commands even if no secrets)
-    let secrets_items = build_secrets_menu();
+    // Secrets submenu - show with placeholder while loading async
+    let secrets_items = build_secrets_placeholder();
     items.push(MenuItem::Submenu {
         name: "secrets".to_string(),
         items: secrets_items,
@@ -349,6 +419,25 @@ fn build_root_menu() -> Vec<MenuItem> {
     });
 
     items
+}
+
+/// Build initial secrets menu with add commands and a loading indicator.
+/// Actual secret items are hydrated asynchronously after the window opens.
+fn build_secrets_placeholder() -> Vec<MenuItem> {
+    vec![
+        MenuItem::Command {
+            name: "+ Add to PROD".to_string(),
+            task: "vault-add-prod".to_string(),
+        },
+        MenuItem::Command {
+            name: "+ Add to DEV".to_string(),
+            task: "vault-add-dev".to_string(),
+        },
+        MenuItem::Command {
+            name: "Loading secrets...".to_string(),
+            task: "noop".to_string(),
+        },
+    ]
 }
 
 fn load_dev_tasks() -> Vec<MenuItem> {
@@ -386,38 +475,10 @@ fn load_dev_tasks() -> Vec<MenuItem> {
     tasks
 }
 
-fn build_secrets_menu() -> Vec<MenuItem> {
-    let mut items = Vec::new();
-
-    // Add commands for creating new secrets
-    items.push(MenuItem::Command {
-        name: "+ Add to PROD".to_string(),
-        task: "vault-add-prod".to_string(),
-    });
-    items.push(MenuItem::Command {
-        name: "+ Add to DEV".to_string(),
-        task: "vault-add-dev".to_string(),
-    });
-
-    // Production secrets (flat list with tag)
-    let prod_secrets = crate::secrets::list_secrets("production");
-    for s in prod_secrets {
-        items.push(MenuItem::Secret {
-            name: s.title,
-            account: "production".to_string(),
-            item_id: s.id,
-        });
-    }
-
-    // Development secrets (flat list with tag)
-    let dev_secrets = crate::secrets::list_secrets("development");
-    for s in dev_secrets {
-        items.push(MenuItem::Secret {
-            name: s.title,
-            account: "development".to_string(),
-            item_id: s.id,
-        });
-    }
-
-    items
+/// Fetch secrets from 1Password synchronously. Intended to be called from
+/// a background thread so the GUI is not blocked.
+pub fn fetch_secrets_blocking() -> LoadedSecrets {
+    let production = crate::secrets::list_secrets("production");
+    let development = crate::secrets::list_secrets("development");
+    LoadedSecrets { production, development }
 }

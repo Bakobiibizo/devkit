@@ -12,8 +12,8 @@ use clap::Parser;
 use crate::cli::{
     Cli, Command, ConfigCommand, DockerBuildArgs, DockerCommand, DockerComposeCommand,
     DockerComposeUpCommand, DockerComposeUpBuildArgs, DockerInitArgs, EnvArgs, EnvCommand,
-    GitCommand, InstallArgs, KubeCommand, LanguageCommand, SetupCommand, StartArgs, VaultCommand,
-    Verb, VersionCommand,
+    GitCommand, InstallArgs, KubeCommand, LanguageCommand, OsCommand, SetupCommand, StartArgs,
+    VaultCommand, Verb, VersionCommand,
 };
 use crate::config::{DevConfig, TaskUpdateMode};
 use crate::envfile;
@@ -177,6 +177,7 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Docker { command } => handle_docker(state, command),
         Command::Kube { command } => handle_kube(state, command),
         Command::Vault { command } => handle_vault(state, command),
+        Command::Os { command } => handle_os(state, command),
         Command::Config { .. } => unreachable!("config commands handled earlier"),
         Command::Setup { .. } => unreachable!("setup commands handled earlier"),
         Command::Review { .. } => unreachable!("review commands handled earlier"),
@@ -579,6 +580,95 @@ fn handle_vault(state: &AppState, command: VaultCommand) -> Result<()> {
         }
         VaultCommand::Delete { item, account } => {
             vault::delete_item(&account, &item, state.ctx.dry_run)
+        }
+    }
+}
+
+fn handle_os(state: &AppState, command: OsCommand) -> Result<()> {
+    let dev_dir = Path::new(".dev");
+    let config_path = dev_dir.join("config.toml");
+
+    match command {
+        OsCommand::Windows => {
+            let template = dev_dir.join("config.windows.toml");
+            if !template.exists() {
+                bail!(
+                    "Windows config template not found at {}. \
+                     Create .dev/config.windows.toml first.",
+                    template.display()
+                );
+            }
+            if state.ctx.dry_run {
+                println!("(dry-run) would copy {} -> {}", template.display(), config_path.display());
+                return Ok(());
+            }
+            fs::copy(&template, &config_path).with_context(|| {
+                format!(
+                    "failed to copy {} to {}",
+                    template.display(),
+                    config_path.display()
+                )
+            })?;
+            println!("Switched to Windows configuration.");
+            println!("  {} -> {}", template.display(), config_path.display());
+            Ok(())
+        }
+        OsCommand::Linux => {
+            let template = dev_dir.join("config.linux.toml");
+            if !template.exists() {
+                bail!(
+                    "Linux config template not found at {}. \
+                     Create .dev/config.linux.toml first.",
+                    template.display()
+                );
+            }
+            if state.ctx.dry_run {
+                println!("(dry-run) would copy {} -> {}", template.display(), config_path.display());
+                return Ok(());
+            }
+            fs::copy(&template, &config_path).with_context(|| {
+                format!(
+                    "failed to copy {} to {}",
+                    template.display(),
+                    config_path.display()
+                )
+            })?;
+            println!("Switched to Linux/macOS configuration.");
+            println!("  {} -> {}", template.display(), config_path.display());
+            Ok(())
+        }
+        OsCommand::Show => {
+            if !config_path.exists() {
+                println!("No .dev/config.toml found.");
+                return Ok(());
+            }
+            let content = fs::read_to_string(&config_path)?;
+            // Look for OS-specific patterns
+            let is_windows = content.contains("npx.cmd") || content.contains(".cmd\"");
+            let is_linux = content.contains("\"npx\"") && !content.contains("npx.cmd");
+
+            println!("Current OS configuration: {}", config_path.display());
+            if is_windows {
+                println!("  Detected: Windows (uses npx.cmd / .cmd extensions)");
+            } else if is_linux {
+                println!("  Detected: Linux/macOS (uses npx, no .cmd extensions)");
+            } else {
+                println!("  Detected: Unknown (no recognizable OS pattern)");
+            }
+
+            // Show available templates
+            let windows_exists = dev_dir.join("config.windows.toml").exists();
+            let linux_exists = dev_dir.join("config.linux.toml").exists();
+            println!("\nAvailable templates:");
+            println!(
+                "  config.windows.toml: {}",
+                if windows_exists { "found" } else { "not found" }
+            );
+            println!(
+                "  config.linux.toml: {}",
+                if linux_exists { "found" } else { "not found" }
+            );
+            Ok(())
         }
     }
 }
