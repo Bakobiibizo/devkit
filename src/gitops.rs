@@ -178,10 +178,10 @@ pub fn release_pr(args: &ReleasePr, dry_run: bool, config: &DevConfig) -> Result
         head.into(),
         "--fill".into(),
     ]);
-    if args.no_open {
-        if let Some(step) = steps.last_mut() {
-            step.push("--no-open".into());
-        }
+    if args.no_open
+        && let Some(step) = steps.last_mut()
+    {
+        step.push("--no-open".into());
     }
 
     run_steps(&steps, dry_run)?;
