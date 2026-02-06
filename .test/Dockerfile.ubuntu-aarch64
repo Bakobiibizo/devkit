@@ -1,0 +1,29 @@
+FROM --platform=linux/arm64 ubuntu:22.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install minimal dependencies for testing
+RUN apt-get update && apt-get install -y \
+    sudo \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a test user with sudo privileges
+RUN useradd -m -s /bin/bash testuser && \
+    echo "testuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Switch to test user
+USER testuser
+WORKDIR /home/testuser
+
+# Copy the dev binary (use arch-specific path for cross-compiled binary)
+ARG DEV_BIN=target/aarch64-unknown-linux-gnu/release/dev
+COPY --chown=testuser:testuser ${DEV_BIN} /usr/local/bin/dev
+
+# Set up environment
+ENV HOME=/home/testuser
+ENV USER=testuser
+
+CMD ["/bin/bash"]

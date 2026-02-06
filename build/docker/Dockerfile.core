@@ -1,0 +1,31 @@
+FROM nvcr.io/nvidia/pytorch:25.09-py3
+
+ARG UID=1000
+ARG GID=1000
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+ git git-lfs curl ca-certificates \
+ build-essential pkg-config \
+ cmake ninja-build \
+ python3.12-venv python3.12-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
+RUN pip uninstall -y pynvml || true \
+&& pip install --no-cache-dir nvidia-ml-py
+
+RUN pip install --no-cache-dir --no-deps --upgrade setuptools wheel \
+&& pip install --no-cache-dir --no-deps --no-build-isolation "git+https://github.com/pytorch/audio@release/2.9" \
+&& python -c "import torchvision; print(torchvision.__version__)" || pip install --no-cache-dir --no-deps --no-build-isolation "git+https://github.com/pytorch/vision@release/2.9" \
+&& python -c "import torch; print(torch.__version__, torch.version.cuda)" \
+&& python -c "import torchaudio; print(torchaudio.__version__)" \
+&& python -c "import torchvision; print(torchvision.__version__)"
+
+RUN groupadd -g ${GID} dev || true \
+&& useradd -m -u ${UID} -g ${GID} -s /bin/bash dev || true \
+&& mkdir -p /home/dev/.cache/huggingface /home/dev/.cache/torch /home/dev/.cache/uv /models \
+&& chown -R ${UID}:${GID} /home/dev /models
+
+WORKDIR /workspace

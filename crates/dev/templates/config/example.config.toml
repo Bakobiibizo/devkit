@@ -121,8 +121,8 @@ commands = [
   "py_fmt_check",
   "py_lint",
   "py_type",
-  "py_test"
-  # If you want hooks here, add: "py_precommit_all"
+  "py_test",
+  "py_precommit_all"
 ]
 
 # ===================== TypeScript ========================
@@ -253,6 +253,18 @@ commands = ["rust_check", "py_check", "ts_check"]
 # Heavier CI gate that includes extras like audit/deny/udeps and hygiene.
 commands = ["rust_ci", "py_ci", "ts_ci"]
 
+# ===================== ngrok ========================
+# Starts ngrok with GitHub OAuth credentials loaded from 1Password.
+# Requires: ~/.env with OP_PRODUCTION service account token
+# Requires: ~/.dev/scripts/ngrok-start.sh (installed by dev setup)
+# Requires: ngrok config at ~/.config/ngrok/ngrok.yml with ${GITHUB_CLIENT_ID} and ${GITHUB_CLIENT_SECRET}
+
+[tasks.ngrok]
+commands = [["bash", "-lc", '''
+pm2 delete ngrok 2>/dev/null || true
+pm2 start ~/.dev/scripts/ngrok-start.sh --name ngrok
+''']]
+
 # ===================== Git ========================
 
 [git]
@@ -260,3 +272,14 @@ commands = ["rust_ci", "py_ci", "ts_ci"]
 # main_branch = "main"
 # release_branch = "release-candidate"
 # allowed_branch_tags = ["feat", "fix", "docs", "chore", "refactor", "perf", "test", "build", "ci"]
+
+# ===================== Environment ========================
+# Define required and optional environment variables for validation.
+# Use `dev env check` to validate your .env file against these requirements.
+
+[env]
+# Required keys must be present and non-empty
+# required = ["DATABASE_URL", "API_KEY", "SECRET_KEY"]
+
+# Optional keys are checked but don't fail validation if missing
+# optional = ["DEBUG", "LOG_LEVEL", "CACHE_TTL"]

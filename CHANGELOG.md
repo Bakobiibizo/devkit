@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 2025-12-21 - v0.3.0
+
+- Describe the notable changes here.
+
+
+## 2025-12-14 - v0.2.2
+
+- Describe the notable changes here.
+
+
 ### Added
 - Global `--dry-run` / `--no-color` flags accepted after subcommands.
 - Git workflows: `branch-create`, `branch-finalize`, and `release-pr` now execute fetch/rebase/merge/push logic, respect dry-run, and update changelogs.
