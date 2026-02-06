@@ -1,6 +1,6 @@
 use std::process::{Command, Stdio};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, Context, Result, bail};
 use camino::Utf8Path;
 use std::fs;
 
@@ -13,10 +13,9 @@ const CI_WORKFLOW: &str = ".github/workflows/ci.yml";
 const GITIGNORE: &str = ".gitignore";
 
 pub fn install() -> Result<()> {
-    ensure_uv()?;
+    ensure_uv()?; // installs uv if necessary
     ensure_uv_tool("ruff")?;
     ensure_uv_tool("mypy")?;
-
     ensure_file(GITIGNORE, "python/.gitignore")?;
     ensure_file(RUFF, "python/ruff.toml")?;
     ensure_file(MYPY, "python/mypy.ini")?;
@@ -24,6 +23,18 @@ pub fn install() -> Result<()> {
     ensure_ci_workflow()?;
 
     println!("Python scaffolding complete");
+    Ok(())
+}
+
+
+fn ensure_file(target: &str, template: &str) -> Result<()> {
+    let destination = Utf8Path::new(target);
+    if destination.exists() {
+        return Ok(());
+    }
+
+    write_template(destination, template)?;
+    println!("  created {}", destination);
     Ok(())
 }
 
@@ -43,24 +54,13 @@ fn ensure_ci_workflow() -> Result<()> {
     Ok(())
 }
 
-fn ensure_file(target: &str, template: &str) -> Result<()> {
-    let destination = Utf8Path::new(target);
-    if destination.exists() {
-        return Ok(());
-    }
-
-    write_template(destination, template)?;
-    println!("  created {}", destination);
-    Ok(())
-}
-
 fn ensure_uv() -> Result<()> {
     if Command::new("uv")
         .arg("--version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .is_ok_and(|status| status.success())
+        .map_or(false, |status| status.success())
     {
         return Ok(());
     }
@@ -101,3 +101,5 @@ fn ensure_uv_tool(tool: &str) -> Result<()> {
     }
     Ok(())
 }
+
+
