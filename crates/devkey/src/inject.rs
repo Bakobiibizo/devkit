@@ -4,9 +4,7 @@ use anyhow::Result;
 
 #[cfg(windows)]
 use windows::{
-    Win32::Foundation::*,
-    Win32::System::DataExchange::*,
-    Win32::System::Memory::*,
+    Win32::Foundation::*, Win32::System::DataExchange::*, Win32::System::Memory::*,
     Win32::UI::Input::KeyboardAndMouse::*,
 };
 

@@ -155,8 +155,23 @@ pub enum Command {
         #[command(subcommand)]
         command: VaultCommand,
     },
+    /// Switch devkit config between OS platforms (Windows/Linux/macOS).
+    Os {
+        #[command(subcommand)]
+        command: OsCommand,
+    },
     #[command(external_subcommand)]
     External(Vec<String>),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum OsCommand {
+    /// Switch to Windows configuration (uses npx.cmd, .cmd extensions).
+    Windows,
+    /// Switch to Linux/macOS configuration (uses npx, no extensions).
+    Linux,
+    /// Show current OS configuration.
+    Show,
 }
 
 #[derive(Subcommand, Debug)]
@@ -221,7 +236,10 @@ pub struct DockerInitArgs {
     pub force: bool,
 
     /// Base image to use in docker/Dockerfile.core
-    #[arg(long = "base-image", default_value = "nvcr.io/nvidia/pytorch:25.09-py3")]
+    #[arg(
+        long = "base-image",
+        default_value = "nvcr.io/nvidia/pytorch:25.09-py3"
+    )]
     pub base_image: String,
 
     /// Compose service name (default: core)
@@ -311,6 +329,9 @@ pub struct BranchFinalize {
 
 #[derive(Args, Debug)]
 pub struct ReleasePr {
+    /// Version bump level (major, minor, patch, prerelease)
+    #[arg(value_enum)]
+    pub bump: BumpLevel,
     #[arg(long = "from")]
     pub from: Option<String>,
     #[arg(long = "to")]

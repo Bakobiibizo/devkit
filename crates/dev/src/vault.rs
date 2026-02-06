@@ -4,7 +4,7 @@
 //! - OP_PRODUCTION for production vault
 //! - OP_DEVELOPMENT for development vault
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::process::Command;
 
 /// Load the service account token for a vault from ~/.env
@@ -24,12 +24,12 @@ fn load_token(account: &str) -> Result<String> {
         if line.starts_with('#') || line.is_empty() {
             continue;
         }
-        if let Some((k, v)) = line.split_once('=') {
-            if k.trim() == key {
-                // Remove surrounding quotes if present
-                let value = v.trim().trim_matches('"').trim_matches('\'');
-                return Ok(value.to_string());
-            }
+        if let Some((k, v)) = line.split_once('=')
+            && k.trim() == key
+        {
+            // Remove surrounding quotes if present
+            let value = v.trim().trim_matches('"').trim_matches('\'');
+            return Ok(value.to_string());
         }
     }
 
@@ -61,7 +61,10 @@ fn run_op(account: &str, args: &[&str]) -> Result<String> {
 /// List all password items in a vault
 pub fn list_items(account: &str, dry_run: bool) -> Result<()> {
     if dry_run {
-        println!("[dry-run] op item list --vault {} --categories Password --format json", account);
+        println!(
+            "[dry-run] op item list --vault {} --categories Password --format json",
+            account
+        );
         return Ok(());
     }
 
@@ -80,8 +83,8 @@ pub fn list_items(account: &str, dry_run: bool) -> Result<()> {
     )?;
 
     // Parse JSON and display nicely
-    let items: serde_json::Value = serde_json::from_str(&output)
-        .context("Failed to parse op output as JSON")?;
+    let items: serde_json::Value =
+        serde_json::from_str(&output).context("Failed to parse op output as JSON")?;
 
     if let Some(arr) = items.as_array() {
         if arr.is_empty() {
@@ -117,9 +120,15 @@ pub fn list_items(account: &str, dry_run: bool) -> Result<()> {
 pub fn get_item(account: &str, item: &str, field: Option<&str>, dry_run: bool) -> Result<()> {
     if dry_run {
         if let Some(f) = field {
-            println!("[dry-run] op item get {} --vault {} --fields label={}", item, account, f);
+            println!(
+                "[dry-run] op item get {} --vault {} --fields label={}",
+                item, account, f
+            );
         } else {
-            println!("[dry-run] op item get {} --vault {} --fields label=password", item, account);
+            println!(
+                "[dry-run] op item get {} --vault {} --fields label=password",
+                item, account
+            );
         }
         return Ok(());
     }
@@ -146,15 +155,15 @@ pub fn get_item(account: &str, item: &str, field: Option<&str>, dry_run: bool) -
 /// Create or update a secret in the vault
 pub fn set_item(account: &str, item: &str, value: &str, dry_run: bool) -> Result<()> {
     if dry_run {
-        println!("[dry-run] op item create --vault {} --category Password --title {} password=<hidden>", account, item);
+        println!(
+            "[dry-run] op item create --vault {} --category Password --title {} password=<hidden>",
+            account, item
+        );
         return Ok(());
     }
 
     // First try to get the item to see if it exists
-    let exists = run_op(
-        account,
-        &["item", "get", item, "--vault", account],
-    ).is_ok();
+    let exists = run_op(account, &["item", "get", item, "--vault", account]).is_ok();
 
     if exists {
         // Update existing item

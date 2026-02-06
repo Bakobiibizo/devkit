@@ -10,8 +10,8 @@ mod window;
 
 use anyhow::Result;
 use tray_icon::{
-    menu::{Menu, MenuEvent, MenuItem, MenuId},
     TrayIconBuilder,
+    menu::{Menu, MenuEvent, MenuId, MenuItem},
 };
 
 fn main() -> Result<()> {

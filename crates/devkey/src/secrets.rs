@@ -51,17 +51,16 @@ pub fn list_secrets(account: &str) -> Vec<SecretItem> {
     };
 
     let mut cmd = Command::new("op");
-    cmd.env("OP_SERVICE_ACCOUNT_TOKEN", &token)
-        .args([
-            "item",
-            "list",
-            "--vault",
-            account,
-            "--categories",
-            "Password",
-            "--format",
-            "json",
-        ]);
+    cmd.env("OP_SERVICE_ACCOUNT_TOKEN", &token).args([
+        "item",
+        "list",
+        "--vault",
+        account,
+        "--categories",
+        "Password",
+        "--format",
+        "json",
+    ]);
 
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
@@ -96,16 +95,15 @@ pub fn get_secret_value(account: &str, item_id: &str) -> Option<String> {
     let token = load_token(account)?;
 
     let mut cmd = Command::new("op");
-    cmd.env("OP_SERVICE_ACCOUNT_TOKEN", &token)
-        .args([
-            "item",
-            "get",
-            item_id,
-            "--vault",
-            account,
-            "--fields",
-            "label=password",
-        ]);
+    cmd.env("OP_SERVICE_ACCOUNT_TOKEN", &token).args([
+        "item",
+        "get",
+        item_id,
+        "--vault",
+        account,
+        "--fields",
+        "label=password",
+    ]);
 
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);

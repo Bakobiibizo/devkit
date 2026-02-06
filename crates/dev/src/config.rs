@@ -90,7 +90,9 @@ pub fn upsert_task_command(
                 let arr = commands_item
                     .as_value_mut()
                     .and_then(EditValue::as_array_mut)
-                    .ok_or_else(|| anyhow::anyhow!("task `{}` has non-array commands", task_name))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("task `{}` has non-array commands", task_name)
+                    })?;
                 arr.push(EditValue::Array(argv_array));
             }
         }

@@ -5,13 +5,21 @@ use anyhow::Result;
 #[derive(Debug, Clone, PartialEq)]
 pub enum InstallState {
     NotInstalled,
-    Partial { reasons: Vec<String> },
-    Installed { version: Option<String>, details: Vec<String> },
-    PresentButUnknown { reasons: Vec<String> },
+    Partial {
+        reasons: Vec<String>,
+    },
+    Installed {
+        version: Option<String>,
+        details: Vec<String>,
+    },
+    PresentButUnknown {
+        reasons: Vec<String>,
+    },
 }
 
 /// Installation mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum InstallMode {
     Apply,
     DryRun,

@@ -1,13 +1,13 @@
 mod component;
 mod context;
-mod system;
-mod docker;
 mod cuda;
-mod tools;
+mod docker;
+mod system;
 mod templates;
+mod tools;
 
 pub use component::{Component, InstallState};
-pub use context::{SetupContext, SetupConfig};
+pub use context::{SetupConfig, SetupContext};
 
 use anyhow::Result;
 
@@ -64,7 +64,7 @@ fn validate_components(components: &[Component]) -> Result<()> {
 /// Show status of all components
 pub fn show_status(ctx: &SetupContext) -> Result<()> {
     let all_components = Component::all();
-    
+
     println!("Setup Component Status");
     println!("======================\n");
 
@@ -75,7 +75,11 @@ pub fn show_status(ctx: &SetupContext) -> Result<()> {
                 println!("{:20} ❌ Not Installed", component.name());
             }
             InstallState::Partial { reasons } => {
-                println!("{:20} ⚠️  Partial ({})", component.name(), reasons.join(", "));
+                println!(
+                    "{:20} ⚠️  Partial ({})",
+                    component.name(),
+                    reasons.join(", ")
+                );
             }
             InstallState::Installed { version, .. } => {
                 if let Some(v) = version {
@@ -85,7 +89,11 @@ pub fn show_status(ctx: &SetupContext) -> Result<()> {
                 }
             }
             InstallState::PresentButUnknown { reasons } => {
-                println!("{:20} ⚠️  Present but Unknown ({})", component.name(), reasons.join(", "));
+                println!(
+                    "{:20} ⚠️  Present but Unknown ({})",
+                    component.name(),
+                    reasons.join(", ")
+                );
             }
         }
     }
@@ -96,7 +104,7 @@ pub fn show_status(ctx: &SetupContext) -> Result<()> {
 /// List all available components and their dependencies
 pub fn list_components() -> Result<()> {
     let all_components = Component::all();
-    
+
     println!("Available Setup Components");
     println!("==========================\n");
 
@@ -105,10 +113,7 @@ pub fn list_components() -> Result<()> {
         let deps_str = if deps.is_empty() {
             "none".to_string()
         } else {
-            deps.iter()
-                .map(|c| c.name())
-                .collect::<Vec<_>>()
-                .join(", ")
+            deps.iter().map(|c| c.name()).collect::<Vec<_>>().join(", ")
         };
 
         println!("{:20} deps: {}", component.name(), deps_str);
@@ -141,7 +146,10 @@ fn visit(
     }
 
     if visiting.contains(&component) {
-        anyhow::bail!("Circular dependency detected involving {}", component.name());
+        anyhow::bail!(
+            "Circular dependency detected involving {}",
+            component.name()
+        );
     }
 
     visiting.insert(component);
