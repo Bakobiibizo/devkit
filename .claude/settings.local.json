@@ -16,7 +16,13 @@
       "Bash(dev vault set:*)",
       "Bash(git checkout:*)",
       "Bash(cargo run:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(findstr:*)",
+      "Bash(Select-String \"^error:\")",
+      "Bash(Select-Object -ExpandProperty Line)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo update:*)"
     ]
   }
 }

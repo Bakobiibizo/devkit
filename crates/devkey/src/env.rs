@@ -83,7 +83,10 @@ QUOTED='single quoted'
         assert_eq!(vars[0], ("API_KEY".to_string(), "secret123".to_string()));
         assert_eq!(
             vars[1],
-            ("DATABASE_URL".to_string(), "postgres://localhost/db".to_string())
+            (
+                "DATABASE_URL".to_string(),
+                "postgres://localhost/db".to_string()
+            )
         );
     }
 }

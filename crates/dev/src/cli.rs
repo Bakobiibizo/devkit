@@ -236,7 +236,10 @@ pub struct DockerInitArgs {
     pub force: bool,
 
     /// Base image to use in docker/Dockerfile.core
-    #[arg(long = "base-image", default_value = "nvcr.io/nvidia/pytorch:25.09-py3")]
+    #[arg(
+        long = "base-image",
+        default_value = "nvcr.io/nvidia/pytorch:25.09-py3"
+    )]
     pub base_image: String,
 
     /// Compose service name (default: core)

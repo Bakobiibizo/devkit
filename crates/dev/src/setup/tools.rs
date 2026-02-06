@@ -50,7 +50,10 @@ pub fn install_zoxide(ctx: &SetupContext) -> Result<()> {
     }
 
     ctx.log.ok(component, "zoxide installed successfully");
-    ctx.log.warn(component, "Add 'eval \"$(zoxide init --cmd cd bash)\"' to your ~/.bashrc to enable");
+    ctx.log.warn(
+        component,
+        "Add 'eval \"$(zoxide init --cmd cd bash)\"' to your ~/.bashrc to enable",
+    );
 
     Ok(())
 }
@@ -88,7 +91,10 @@ pub fn install_atuin(ctx: &SetupContext) -> Result<()> {
     ctx.log.ok(component, "Installing atuin");
 
     if ctx.dry_run {
-        ctx.log.dry_run(component, "curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh");
+        ctx.log.dry_run(
+            component,
+            "curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh",
+        );
         return Ok(());
     }
 
@@ -159,9 +165,7 @@ pub fn install_ngrok(ctx: &SetupContext) -> Result<()> {
 
     ctx.execute(
         component,
-        std::process::Command::new("sudo")
-            .arg("apt")
-            .arg("update"),
+        std::process::Command::new("sudo").arg("apt").arg("update"),
     )?;
 
     ctx.log.ok(component, "Installing ngrok");
@@ -176,7 +180,10 @@ pub fn install_ngrok(ctx: &SetupContext) -> Result<()> {
     )?;
 
     ctx.log.ok(component, "ngrok installed successfully");
-    ctx.log.warn(component, "Run 'ngrok config add-authtoken <token>' to configure");
+    ctx.log.warn(
+        component,
+        "Run 'ngrok config add-authtoken <token>' to configure",
+    );
 
     Ok(())
 }
@@ -296,7 +303,8 @@ rm() {
 "#;
 
     if ctx.dry_run {
-        ctx.log.dry_run(component, "Append rm guard function to ~/.bashrc");
+        ctx.log
+            .dry_run(component, "Append rm guard function to ~/.bashrc");
         return Ok(());
     }
 
@@ -308,8 +316,12 @@ rm() {
 
     file.write_all(rm_guard_script.as_bytes())?;
 
-    ctx.log.ok(component, "rm guard function installed successfully");
-    ctx.log.warn(component, "Run 'source ~/.bashrc' or restart your shell to enable");
+    ctx.log
+        .ok(component, "rm guard function installed successfully");
+    ctx.log.warn(
+        component,
+        "Run 'source ~/.bashrc' or restart your shell to enable",
+    );
 
     Ok(())
 }
@@ -317,9 +329,7 @@ rm() {
 /// Detect 1Password CLI
 pub fn detect_op(ctx: &SetupContext) -> Result<InstallState> {
     if ctx.command_exists("op") {
-        let output = std::process::Command::new("op")
-            .arg("--version")
-            .output()?;
+        let output = std::process::Command::new("op").arg("--version").output()?;
 
         if output.status.success() {
             let version = String::from_utf8_lossy(&output.stdout);
@@ -345,7 +355,8 @@ pub fn install_op(ctx: &SetupContext) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
         if ctx.dry_run {
-            ctx.log.dry_run(component, "winget install AgileBits.1Password.CLI");
+            ctx.log
+                .dry_run(component, "winget install AgileBits.1Password.CLI");
             return Ok(());
         }
 
@@ -391,7 +402,10 @@ pub fn install_op(ctx: &SetupContext) -> Result<()> {
 
             let output = std::process::Command::new("sh")
                 .arg("-c")
-                .arg(format!("echo '{}' | sudo tee /etc/apt/sources.list.d/1password.list", repo_line))
+                .arg(format!(
+                    "echo '{}' | sudo tee /etc/apt/sources.list.d/1password.list",
+                    repo_line
+                ))
                 .output()?;
 
             if !output.status.success() {
@@ -403,22 +417,23 @@ pub fn install_op(ctx: &SetupContext) -> Result<()> {
 
         ctx.execute(
             component,
-            std::process::Command::new("sudo")
-                .arg("apt")
-                .arg("update"),
+            std::process::Command::new("sudo").arg("apt").arg("update"),
         )?;
 
         ctx.log.ok(component, "Installing 1password-cli");
 
         ctx.execute(
             component,
-            std::process::Command::new("sudo")
-                .args(["apt", "install", "-y", "1password-cli"]),
+            std::process::Command::new("sudo").args(["apt", "install", "-y", "1password-cli"]),
         )?;
     }
 
-    ctx.log.ok(component, "1Password CLI installed successfully");
-    ctx.log.warn(component, "Configure service account tokens in ~/.env as OP_PRODUCTION and OP_DEVELOPMENT");
+    ctx.log
+        .ok(component, "1Password CLI installed successfully");
+    ctx.log.warn(
+        component,
+        "Configure service account tokens in ~/.env as OP_PRODUCTION and OP_DEVELOPMENT",
+    );
 
     Ok(())
 }

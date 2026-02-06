@@ -177,12 +177,12 @@ fn write_version(doc: &mut DocumentMut, kind: VersionFileKind, version: &Version
         VersionFileKind::PyprojectToml => doc["project"]["version"] = value(version.to_string()),
         VersionFileKind::PackageJson | VersionFileKind::TauriConf => {
             // Update version in the stored raw JSON
-            if let Some(raw) = doc["__raw_json"].as_str() {
-                if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(raw) {
-                    json["version"] = serde_json::Value::String(version.to_string());
-                    if let Ok(updated) = serde_json::to_string_pretty(&json) {
-                        doc["__raw_json"] = value(updated);
-                    }
+            if let Some(raw) = doc["__raw_json"].as_str()
+                && let Ok(mut json) = serde_json::from_str::<serde_json::Value>(raw)
+            {
+                json["version"] = serde_json::Value::String(version.to_string());
+                if let Ok(updated) = serde_json::to_string_pretty(&json) {
+                    doc["__raw_json"] = value(updated);
                 }
             }
         }

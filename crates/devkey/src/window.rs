@@ -5,9 +5,9 @@
 
 use crate::menu::{LoadedSecrets, MenuItem, MenuState};
 use iced::keyboard::{self, Key};
-use iced::widget::{column, container, scrollable, text, Column};
+use iced::widget::{Column, column, container, scrollable, text};
 use iced::{
-    event, window, Color, Element, Event, Length, Padding, Size, Subscription, Task, Theme,
+    Color, Element, Event, Length, Padding, Size, Subscription, Task, Theme, event, window,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -79,14 +79,12 @@ impl DevKey {
                         // appears instantly and secrets hydrate when ready.
                         let secrets_task = Task::perform(
                             async {
-                                tokio::task::spawn_blocking(
-                                    crate::menu::fetch_secrets_blocking,
-                                )
-                                .await
-                                .unwrap_or_else(|_| LoadedSecrets {
-                                    production: Vec::new(),
-                                    development: Vec::new(),
-                                })
+                                tokio::task::spawn_blocking(crate::menu::fetch_secrets_blocking)
+                                    .await
+                                    .unwrap_or_else(|_| LoadedSecrets {
+                                        production: Vec::new(),
+                                        development: Vec::new(),
+                                    })
                             },
                             Message::SecretsLoaded,
                         );
@@ -199,15 +197,27 @@ impl DevKey {
                     }
                     Key::Character(c) if c.to_lowercase().to_string() == "e" => {
                         // Edit selected secret
-                        if let Some(MenuItem::Secret { name, account, item_id }) = menu.items.get(menu.selected) {
-                            let (name, account, item_id) = (name.clone(), account.clone(), item_id.clone());
+                        if let Some(MenuItem::Secret {
+                            name,
+                            account,
+                            item_id,
+                        }) = menu.items.get(menu.selected)
+                        {
+                            let (name, account, item_id) =
+                                (name.clone(), account.clone(), item_id.clone());
                             menu.start_edit(&account, &item_id, &name);
                         }
                     }
                     Key::Character(c) if c.to_lowercase().to_string() == "d" => {
                         // Delete selected secret
-                        if let Some(MenuItem::Secret { name, account, item_id }) = menu.items.get(menu.selected) {
-                            let (name, account, item_id) = (name.clone(), account.clone(), item_id.clone());
+                        if let Some(MenuItem::Secret {
+                            name,
+                            account,
+                            item_id,
+                        }) = menu.items.get(menu.selected)
+                        {
+                            let (name, account, item_id) =
+                                (name.clone(), account.clone(), item_id.clone());
                             menu.start_delete(&account, &item_id, &name);
                         }
                     }
@@ -226,9 +236,7 @@ impl DevKey {
                 // Don't close on focus lost - user might click elsewhere temporarily
                 Task::none()
             }
-            Message::WindowOpened(id) => {
-                window::gain_focus(id)
-            }
+            Message::WindowOpened(id) => window::gain_focus(id),
         }
     }
 
@@ -250,7 +258,7 @@ impl DevKey {
     }
 
     fn view(&self, id: window::Id) -> Element<'_, Message> {
-        use crate::menu::{InputMode, InputField};
+        use crate::menu::{InputField, InputMode};
 
         let Some(menu) = self.windows.get(&id) else {
             return container(text("")).into();
@@ -258,7 +266,8 @@ impl DevKey {
 
         // Check if in input mode
         match &menu.input_mode {
-            InputMode::AddSecret { account, field } | InputMode::EditSecret { account, field, .. } => {
+            InputMode::AddSecret { account, field }
+            | InputMode::EditSecret { account, field, .. } => {
                 let is_edit = matches!(&menu.input_mode, InputMode::EditSecret { .. });
                 let title_text = if is_edit {
                     format!("Edit Secret in {}", account.to_uppercase())
@@ -302,8 +311,14 @@ impl DevKey {
                         ..Default::default()
                     });
 
-                let value_label_text = if menu.reveal_value { "Value:" } else { "Value: (Ctrl+R to reveal)" };
-                let value_label = text(value_label_text).size(12).color(Color::from_rgb(0.6, 0.6, 0.6));
+                let value_label_text = if menu.reveal_value {
+                    "Value:"
+                } else {
+                    "Value: (Ctrl+R to reveal)"
+                };
+                let value_label = text(value_label_text)
+                    .size(12)
+                    .color(Color::from_rgb(0.6, 0.6, 0.6));
                 let value_display = if menu.input_value.is_empty() {
                     "_".to_string()
                 } else if menu.reveal_value {
@@ -311,13 +326,14 @@ impl DevKey {
                 } else {
                     format!("{}*", "*".repeat(menu.input_value.len().min(20)))
                 };
-                let value_value = text(value_display)
-                    .size(13)
-                    .color(if *field == InputField::Value {
-                        Color::WHITE
-                    } else {
-                        Color::from_rgb(0.7, 0.7, 0.7)
-                    });
+                let value_value =
+                    text(value_display)
+                        .size(13)
+                        .color(if *field == InputField::Value {
+                            Color::WHITE
+                        } else {
+                            Color::from_rgb(0.7, 0.7, 0.7)
+                        });
                 let value_row = container(column![value_label, value_value])
                     .width(Length::Fill)
                     .padding(Padding::from([6, 8]))
@@ -348,7 +364,9 @@ impl DevKey {
                     .width(Length::Fill)
                     .height(Length::Fill)
                     .style(|_| container::Style {
-                        background: Some(iced::Background::Color(Color::from_rgb(0.12, 0.12, 0.12))),
+                        background: Some(iced::Background::Color(Color::from_rgb(
+                            0.12, 0.12, 0.12,
+                        ))),
                         border: iced::Border {
                             radius: 8.0.into(),
                             width: 1.0,
@@ -367,9 +385,13 @@ impl DevKey {
                     .width(Length::Fill)
                     .padding(Padding::from([8, 12]));
 
-                let msg = text(format!("Delete '{}' from {}?", name, account.to_uppercase()))
-                    .size(13)
-                    .color(Color::WHITE);
+                let msg = text(format!(
+                    "Delete '{}' from {}?",
+                    name,
+                    account.to_uppercase()
+                ))
+                .size(13)
+                .color(Color::WHITE);
 
                 let msg_row = container(msg)
                     .width(Length::Fill)
@@ -389,7 +411,9 @@ impl DevKey {
                     .width(Length::Fill)
                     .height(Length::Fill)
                     .style(|_| container::Style {
-                        background: Some(iced::Background::Color(Color::from_rgb(0.12, 0.12, 0.12))),
+                        background: Some(iced::Background::Color(Color::from_rgb(
+                            0.12, 0.12, 0.12,
+                        ))),
                         border: iced::Border {
                             radius: 8.0.into(),
                             width: 1.0,
@@ -422,7 +446,11 @@ impl DevKey {
                 MenuItem::EnvVar { key, .. } => format!("  {}", key),
                 MenuItem::Command { name, .. } => format!("  {}", name),
                 MenuItem::Secret { name, account, .. } => {
-                    let tag = if account == "production" { "[PROD]" } else { "[DEV]" };
+                    let tag = if account == "production" {
+                        "[PROD]"
+                    } else {
+                        "[DEV]"
+                    };
                     format!("  {} {}", tag, name)
                 }
                 MenuItem::Back => "  ← Back".to_string(),
@@ -435,9 +463,7 @@ impl DevKey {
                     .width(Length::Fill)
                     .padding(Padding::from([6, 8]))
                     .style(|_| container::Style {
-                        background: Some(iced::Background::Color(Color::from_rgb(
-                            0.2, 0.4, 0.6,
-                        ))),
+                        background: Some(iced::Background::Color(Color::from_rgb(0.2, 0.4, 0.6))),
                         border: iced::Border {
                             radius: 4.0.into(),
                             ..Default::default()

@@ -1,15 +1,15 @@
 mod cli;
 mod config;
+mod dockergen;
 mod envfile;
 mod gitops;
 mod logging;
-mod templates;
 mod review;
 mod runner;
 mod scaffold;
 mod setup;
-mod dockergen;
 mod tasks;
+mod templates;
 mod vault;
 mod versioning;
 mod walk;

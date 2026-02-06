@@ -4,9 +4,7 @@ use anyhow::Result;
 
 #[cfg(windows)]
 use windows::{
-    Win32::Foundation::*,
-    Win32::UI::Input::KeyboardAndMouse::*,
-    Win32::UI::WindowsAndMessaging::*,
+    Win32::Foundation::*, Win32::UI::Input::KeyboardAndMouse::*, Win32::UI::WindowsAndMessaging::*,
 };
 
 const HOTKEY_ID: i32 = 1;

@@ -18,10 +18,23 @@ pub struct LoadedSecrets {
 
 #[derive(Debug, Clone)]
 pub enum MenuItem {
-    Command { name: String, task: String },
-    Submenu { name: String, items: Vec<MenuItem> },
-    EnvVar { key: String, value: String },
-    Secret { name: String, account: String, item_id: String },
+    Command {
+        name: String,
+        task: String,
+    },
+    Submenu {
+        name: String,
+        items: Vec<MenuItem>,
+    },
+    EnvVar {
+        key: String,
+        value: String,
+    },
+    Secret {
+        name: String,
+        account: String,
+        item_id: String,
+    },
     Back,
 }
 
@@ -41,9 +54,20 @@ impl MenuItem {
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputMode {
     None,
-    AddSecret { account: String, field: InputField },
-    EditSecret { account: String, item_id: String, field: InputField },
-    ConfirmDelete { account: String, item_id: String, name: String },
+    AddSecret {
+        account: String,
+        field: InputField,
+    },
+    EditSecret {
+        account: String,
+        item_id: String,
+        field: InputField,
+    },
+    ConfirmDelete {
+        account: String,
+        item_id: String,
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -147,36 +171,37 @@ impl MenuState {
 
     pub fn input_char(&mut self, c: char) {
         match &self.input_mode {
-            InputMode::AddSecret { field, .. } | InputMode::EditSecret { field, .. } => {
-                match field {
-                    InputField::Name => self.input_name.push(c),
-                    InputField::Value => self.input_value.push(c),
-                }
-            }
+            InputMode::AddSecret { field, .. } | InputMode::EditSecret { field, .. } => match field
+            {
+                InputField::Name => self.input_name.push(c),
+                InputField::Value => self.input_value.push(c),
+            },
             _ => {}
         }
     }
 
     pub fn input_paste(&mut self, text: &str) {
         match &self.input_mode {
-            InputMode::AddSecret { field, .. } | InputMode::EditSecret { field, .. } => {
-                match field {
-                    InputField::Name => self.input_name.push_str(text),
-                    InputField::Value => self.input_value.push_str(text),
-                }
-            }
+            InputMode::AddSecret { field, .. } | InputMode::EditSecret { field, .. } => match field
+            {
+                InputField::Name => self.input_name.push_str(text),
+                InputField::Value => self.input_value.push_str(text),
+            },
             _ => {}
         }
     }
 
     pub fn input_backspace(&mut self) {
         match &self.input_mode {
-            InputMode::AddSecret { field, .. } | InputMode::EditSecret { field, .. } => {
-                match field {
-                    InputField::Name => { self.input_name.pop(); }
-                    InputField::Value => { self.input_value.pop(); }
+            InputMode::AddSecret { field, .. } | InputMode::EditSecret { field, .. } => match field
+            {
+                InputField::Name => {
+                    self.input_name.pop();
                 }
-            }
+                InputField::Value => {
+                    self.input_value.pop();
+                }
+            },
             _ => {}
         }
     }
@@ -195,7 +220,11 @@ impl MenuState {
                     };
                 }
             }
-            InputMode::EditSecret { account, item_id, field } => {
+            InputMode::EditSecret {
+                account,
+                item_id,
+                field,
+            } => {
                 if *field == InputField::Name && !self.input_name.is_empty() {
                     self.input_mode = InputMode::EditSecret {
                         account: account.clone(),
@@ -211,9 +240,19 @@ impl MenuState {
     pub fn input_submit(&mut self) -> bool {
         match &self.input_mode {
             InputMode::AddSecret { account, field } => {
-                if *field == InputField::Value && !self.input_name.is_empty() && !self.input_value.is_empty() {
+                if *field == InputField::Value
+                    && !self.input_name.is_empty()
+                    && !self.input_value.is_empty()
+                {
                     let mut cmd = std::process::Command::new("dev");
-                    cmd.args(["vault", "set", &self.input_name, &self.input_value, "--account", account]);
+                    cmd.args([
+                        "vault",
+                        "set",
+                        &self.input_name,
+                        &self.input_value,
+                        "--account",
+                        account,
+                    ]);
                     #[cfg(windows)]
                     cmd.creation_flags(CREATE_NO_WINDOW);
                     let _ = cmd.spawn();
@@ -222,9 +261,19 @@ impl MenuState {
                 }
             }
             InputMode::EditSecret { account, field, .. } => {
-                if *field == InputField::Value && !self.input_name.is_empty() && !self.input_value.is_empty() {
+                if *field == InputField::Value
+                    && !self.input_name.is_empty()
+                    && !self.input_value.is_empty()
+                {
                     let mut cmd = std::process::Command::new("dev");
-                    cmd.args(["vault", "set", &self.input_name, &self.input_value, "--account", account]);
+                    cmd.args([
+                        "vault",
+                        "set",
+                        &self.input_name,
+                        &self.input_value,
+                        "--account",
+                        account,
+                    ]);
                     #[cfg(windows)]
                     cmd.creation_flags(CREATE_NO_WINDOW);
                     let _ = cmd.spawn();
@@ -232,7 +281,9 @@ impl MenuState {
                     return true;
                 }
             }
-            InputMode::ConfirmDelete { account, item_id, .. } => {
+            InputMode::ConfirmDelete {
+                account, item_id, ..
+            } => {
                 let mut cmd = std::process::Command::new("dev");
                 cmd.args(["vault", "delete", item_id, "--account", account]);
                 #[cfg(windows)]
@@ -304,7 +355,9 @@ impl MenuState {
                 None
             }
             MenuItem::EnvVar { value, .. } => Some(value),
-            MenuItem::Secret { account, item_id, .. } => {
+            MenuItem::Secret {
+                account, item_id, ..
+            } => {
                 // Fetch the secret value from 1Password
                 crate::secrets::get_secret_value(&account, &item_id)
             }
@@ -480,5 +533,8 @@ fn load_dev_tasks() -> Vec<MenuItem> {
 pub fn fetch_secrets_blocking() -> LoadedSecrets {
     let production = crate::secrets::list_secrets("production");
     let development = crate::secrets::list_secrets("development");
-    LoadedSecrets { production, development }
+    LoadedSecrets {
+        production,
+        development,
+    }
 }

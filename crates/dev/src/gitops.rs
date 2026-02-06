@@ -98,14 +98,13 @@ pub fn branch_finalize(args: &BranchFinalize, dry_run: bool) -> Result<()> {
 
     // Warn if --delete was passed (deprecated, deletion now happens via GitHub)
     if args.delete {
-        println!("Note: --delete is deprecated. Branch deletion now happens via GitHub after PR merge.");
+        println!(
+            "Note: --delete is deprecated. Branch deletion now happens via GitHub after PR merge."
+        );
     }
 
     run_steps(&steps, dry_run)?;
-    println!(
-        "Created PR for `{}` into `{}`.",
-        branch, base
-    );
+    println!("Created PR for `{}` into `{}`.", branch, base);
     println!("Review and merge via GitHub, then delete the branch if desired.");
     Ok(())
 }
@@ -175,10 +174,10 @@ pub fn release_pr(args: &ReleasePr, dry_run: bool, config: &DevConfig) -> Result
         head.into(),
         "--fill".into(),
     ]);
-    if args.no_open {
-        if let Some(step) = steps.last_mut() {
-            step.push("--no-open".into());
-        }
+    if args.no_open
+        && let Some(step) = steps.last_mut()
+    {
+        step.push("--no-open".into());
     }
 
     run_steps(&steps, dry_run)?;

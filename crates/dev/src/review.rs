@@ -107,7 +107,7 @@ fn render_overlay(file_path: &str, diff: &str, repo_root: &Path) -> Vec<String> 
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("");
-    
+
     overlay.push(format!("```{}", file_lang));
 
     let target_path = repo_root.join(file_path);
@@ -141,7 +141,7 @@ fn render_overlay(file_path: &str, diff: &str, repo_root: &Path) -> Vec<String> 
         // Add a visual separator for the diff section
         overlay.push(String::new());
         overlay.push(format!(">>> CHANGES START {} <<<", hunk.header));
-        
+
         // Process the diff hunk content
         for diff_line in &hunk.content {
             if diff_line.starts_with('+') && !diff_line.starts_with("+++") {
@@ -151,13 +151,13 @@ fn render_overlay(file_path: &str, diff: &str, repo_root: &Path) -> Vec<String> 
             } else if diff_line.starts_with('-') && !diff_line.starts_with("---") {
                 // Removed line - show with - prefix (don't increment line_idx)
                 overlay.push(format!("- {}", &diff_line[1..]));
-            } else if diff_line.starts_with(' ') {
+            } else if let Some(stripped) = diff_line.strip_prefix(' ') {
                 // Context line - show as-is
-                overlay.push(diff_line[1..].to_string());
+                overlay.push(stripped.to_string());
                 line_idx += 1;
             }
         }
-        
+
         overlay.push(">>> CHANGES END <<<".to_string());
         overlay.push(String::new());
     }
@@ -175,7 +175,7 @@ fn render_overlay(file_path: &str, diff: &str, repo_root: &Path) -> Vec<String> 
 
 fn render_section(title: &str, entries: &[(String, String)], repo_root: &Path) -> String {
     let mut lines = vec![format!("## {}", title)];
-    
+
     if entries.is_empty() {
         lines.push("_No changes detected in this scope._".to_string());
         lines.push(String::new());
@@ -191,7 +191,9 @@ fn render_section(title: &str, entries: &[(String, String)], repo_root: &Path) -
 
 pub fn generate_review(opts: ReviewOptions, repo_root: &Path) -> Result<String> {
     let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%SZ");
-    let current_branch = run_git(&["rev-parse", "--abbrev-ref", "HEAD"])?.trim().to_string();
+    let current_branch = run_git(&["rev-parse", "--abbrev-ref", "HEAD"])?
+        .trim()
+        .to_string();
     let status = run_git(&["status", "-sb"])?;
 
     let mut sections = Vec::new();
@@ -205,7 +207,11 @@ pub fn generate_review(opts: ReviewOptions, repo_root: &Path) -> Result<String> 
 
         if opts.include_working {
             let worktree_entries = collect_file_diffs(&[])?;
-            sections.push(render_section("Unstaged Changes", &worktree_entries, repo_root));
+            sections.push(render_section(
+                "Unstaged Changes",
+                &worktree_entries,
+                repo_root,
+            ));
         }
     }
 

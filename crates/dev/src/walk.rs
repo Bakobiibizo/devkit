@@ -122,17 +122,15 @@ fn walk_directory(
     }
 
     let indent = "  ".repeat(depth);
-    
-    let mut entries: Vec<_> = fs::read_dir(path)?
-        .filter_map(|e| e.ok())
-        .collect();
-    
+
+    let mut entries: Vec<_> = fs::read_dir(path)?.filter_map(|e| e.ok()).collect();
+
     entries.sort_by_key(|e| e.file_name());
 
     for entry in entries {
         let file_name = entry.file_name();
         let name = file_name.to_string_lossy();
-        
+
         if should_ignore(&name, opts.ignore_hidden, patterns) {
             continue;
         }
@@ -145,33 +143,40 @@ fn walk_directory(
             walk_directory(&entry_path, output, depth + 1, opts, patterns)?;
         } else {
             output.push_str(&format!("{}- 📄 **{}**\n", indent, name));
-            
+
             if opts.include_content {
-                let ext = entry_path.extension()
+                let ext = entry_path
+                    .extension()
                     .and_then(|e| e.to_str())
                     .map(|e| format!(".{}", e));
-                
+
                 let should_include = if let Some(ref exts) = opts.extensions {
-                    ext.as_ref().map_or(false, |e| exts.contains(e))
+                    ext.as_ref().is_some_and(|e| exts.contains(e))
                 } else {
                     true
                 };
 
-                if should_include {
-                    if let Ok(content) = fs::read_to_string(&entry_path) {
-                        let size = metadata.len();
-                        let modified = metadata.modified()
-                            .map(format_timestamp)
-                            .unwrap_or_else(|_| "unknown".to_string());
-                        
-                        output.push_str(&format!("\n{}  📄 *File Path*: `{}`\n", indent, entry_path.display()));
-                        output.push_str(&format!("{}  *Size*: {} bytes | *Modified*: {}\n\n", indent, size, modified));
-                        output.push_str(&format!("{}  ```\n", indent));
-                        for line in content.lines() {
-                            output.push_str(&format!("{}  {}\n", indent, line));
-                        }
-                        output.push_str(&format!("{}  ```\n\n", indent));
+                if should_include && let Ok(content) = fs::read_to_string(&entry_path) {
+                    let size = metadata.len();
+                    let modified = metadata
+                        .modified()
+                        .map(format_timestamp)
+                        .unwrap_or_else(|_| "unknown".to_string());
+
+                    output.push_str(&format!(
+                        "\n{}  📄 *File Path*: `{}`\n",
+                        indent,
+                        entry_path.display()
+                    ));
+                    output.push_str(&format!(
+                        "{}  *Size*: {} bytes | *Modified*: {}\n\n",
+                        indent, size, modified
+                    ));
+                    output.push_str(&format!("{}  ```\n", indent));
+                    for line in content.lines() {
+                        output.push_str(&format!("{}  {}\n", indent, line));
                     }
+                    output.push_str(&format!("{}  ```\n\n", indent));
                 }
             }
         }
@@ -182,15 +187,13 @@ fn walk_directory(
 
 pub fn generate_manifest(dir: &Path, opts: WalkOptions) -> Result<String> {
     let mut output = String::from("# Directory Structure\n\n");
-    
-    let dir_name = dir.file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or(".");
-    
+
+    let dir_name = dir.file_name().and_then(|n| n.to_str()).unwrap_or(".");
+
     output.push_str(&format!("- 📁 **{}/**\n", dir_name));
-    
+
     let patterns = get_ignore_patterns();
     walk_directory(dir, &mut output, 1, &opts, &patterns)?;
-    
+
     Ok(output)
 }
