@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 2026-02-06 - v0.3.1
+
+- Describe the notable changes here.
+
+
 ## 2025-12-21 - v0.3.0
 
 - Describe the notable changes here.
@@ -30,3 +35,11 @@
 ## 2025-10-09 - v0.1.1
 
 - Describe the notable changes here.
+## 2026-02-06 (main → release-candidate)
+
+- dev ci
+- chore(python): add pre-commit to CI pipeline
+- feat(python): install toolchain dependencies during scaffold
+- feat: auto-generate default config when missing
+- docs: add usage guide
+
