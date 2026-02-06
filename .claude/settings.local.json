@@ -22,7 +22,8 @@
       "Bash(Select-String \"^error:\")",
       "Bash(Select-Object -ExpandProperty Line)",
       "Bash(cargo fmt:*)",
-      "Bash(cargo update:*)"
+      "Bash(cargo update:*)",
+      "Bash(cargo test:*)"
     ]
   }
 }

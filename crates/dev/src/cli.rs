@@ -329,6 +329,9 @@ pub struct BranchFinalize {
 
 #[derive(Args, Debug)]
 pub struct ReleasePr {
+    /// Version bump level (major, minor, patch, prerelease)
+    #[arg(value_enum)]
+    pub bump: BumpLevel,
     #[arg(long = "from")]
     pub from: Option<String>,
     #[arg(long = "to")]
