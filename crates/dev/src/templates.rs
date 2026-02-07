@@ -9,7 +9,8 @@ use rust_embed::RustEmbed;
 struct Templates;
 
 pub fn get_bytes(path: &str) -> Result<Vec<u8>> {
-    let file = Templates::get(path).ok_or_else(|| anyhow!("embedded template `{}` missing", path))?;
+    let file =
+        Templates::get(path).ok_or_else(|| anyhow!("embedded template `{}` missing", path))?;
     Ok(file.data.as_ref().to_vec())
 }
 
@@ -22,8 +23,7 @@ pub fn get_string(path: &str) -> Result<String> {
 
 pub fn write_to(destination: &Utf8Path, bytes: &[u8]) -> Result<()> {
     if let Some(parent) = destination.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("creating directory {}", parent))?;
+        fs::create_dir_all(parent).with_context(|| format!("creating directory {}", parent))?;
     }
     fs::write(destination, bytes).with_context(|| format!("writing {}", destination))
 }

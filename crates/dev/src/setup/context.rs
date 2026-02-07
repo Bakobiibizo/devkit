@@ -68,6 +68,7 @@ impl Platform {
 #[derive(Debug, Clone)]
 pub struct SetupLogger {
     log_file: Option<PathBuf>,
+    #[allow(dead_code)]
     dry_run: bool,
 }
 
@@ -86,6 +87,7 @@ impl SetupLogger {
         self.log_to_file(component, "warn", message, None, None);
     }
 
+    #[allow(dead_code)]
     pub fn error(&self, component: &str, message: &str) {
         eprintln!("[error] {}: {}", component, message);
         self.log_to_file(component, "error", message, None, None);
@@ -146,7 +148,9 @@ impl SetupLogger {
 #[derive(Debug, Clone)]
 pub struct SetupConfig {
     pub cuda_version: Option<String>,
+    #[allow(dead_code)]
     pub nvidia_driver_version: Option<String>,
+    #[allow(dead_code)]
     pub cuda_driver_version: Option<String>,
     pub node_version: String,
     pub default_components: Vec<String>,
@@ -179,15 +183,20 @@ impl SetupConfig {
         // Validate default_components
         for component_name in &self.default_components {
             use crate::setup::Component;
-            Component::from_str(component_name)
-                .map_err(|_| anyhow::anyhow!("Unknown component in default_components: {}", component_name))?;
+            Component::from_str(component_name).map_err(|_| {
+                anyhow::anyhow!(
+                    "Unknown component in default_components: {}",
+                    component_name
+                )
+            })?;
         }
 
         // Validate skip_components
         for component_name in &self.skip_components {
             use crate::setup::Component;
-            Component::from_str(component_name)
-                .map_err(|_| anyhow::anyhow!("Unknown component in skip_components: {}", component_name))?;
+            Component::from_str(component_name).map_err(|_| {
+                anyhow::anyhow!("Unknown component in skip_components: {}", component_name)
+            })?;
         }
 
         // Validate node_version is not empty
@@ -268,20 +277,11 @@ impl SetupContext {
             "error"
         };
 
-        self.log.log_command(
-            component,
-            &cmd_str,
-            Some(&stdout),
-            Some(&stderr),
-            status,
-        );
+        self.log
+            .log_command(component, &cmd_str, Some(&stdout), Some(&stderr), status);
 
         if !output.status.success() {
-            anyhow::bail!(
-                "Command failed with status {}: {}",
-                output.status,
-                stderr
-            );
+            anyhow::bail!("Command failed with status {}: {}", output.status, stderr);
         }
 
         Ok(())

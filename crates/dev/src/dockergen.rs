@@ -24,7 +24,8 @@ pub fn init(args: &DockerInitArgs, dry_run: bool) -> Result<()> {
     }
 
     if !docker_dir.exists() {
-        fs::create_dir_all(docker_dir).with_context(|| format!("creating {}", docker_dir.display()))?;
+        fs::create_dir_all(docker_dir)
+            .with_context(|| format!("creating {}", docker_dir.display()))?;
     }
 
     write_file(&dockerfile_path, &dockerfile, args.force)?;
@@ -37,7 +38,10 @@ pub fn init(args: &DockerInitArgs, dry_run: bool) -> Result<()> {
 
 fn write_file(path: &Path, content: &str, force: bool) -> Result<()> {
     if path.exists() && !force {
-        bail!("{} already exists; rerun with --force to overwrite", path.display());
+        bail!(
+            "{} already exists; rerun with --force to overwrite",
+            path.display()
+        );
     }
     fs::write(path, content).with_context(|| format!("writing {}", path.display()))
 }

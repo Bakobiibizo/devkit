@@ -7,9 +7,15 @@ use semver::{Prerelease, Version};
 use toml_edit::{DocumentMut, value};
 
 use crate::{
-    cli::{ChangelogArgs, VersionBump, VersionCommand},
+    cli::{BumpLevel, ChangelogArgs, VersionBump, VersionCommand},
     config::DevConfig,
 };
+
+/// Result of a version bump operation.
+pub struct BumpResult {
+    pub new_version: Version,
+    pub changed_paths: Vec<Utf8PathBuf>,
+}
 
 pub fn handle(config: &DevConfig, dry_run: bool, command: VersionCommand) -> Result<()> {
     match command {
@@ -27,52 +33,88 @@ fn show_version(config: &DevConfig) -> Result<()> {
     Ok(())
 }
 
-fn bump_version(config: &DevConfig, args: &VersionBump, dry_run: bool) -> Result<()> {
-    let (path, kind) = locate_version_file(config)?;
-    let mut doc = read_manifest(&path, kind)?;
-    let current = current_version(&doc, kind)?;
+/// Perform a version bump, updating version files on disk.
+/// Does NOT update changelog or run git operations.
+pub fn perform_bump(
+    config: &DevConfig,
+    level: BumpLevel,
+    custom: Option<&str>,
+    dry_run: bool,
+) -> Result<BumpResult> {
+    let cwd = std::env::current_dir().context("determining current directory")?;
+    let cwd = Utf8PathBuf::from_path_buf(cwd)
+        .map_err(|_| anyhow!("current directory is not valid UTF-8"))?;
 
-    let target = if let Some(custom) = &args.custom {
-        Version::parse(custom).with_context(|| format!("parsing custom version `{}`", custom))?
+    let version_files = if let Some(tauri_files) = locate_tauri_version_files(&cwd) {
+        tauri_files
     } else {
-        increment_version(&current, args.level)?
+        let (path, kind) = locate_version_file(config)?;
+        vec![(path, kind)]
     };
 
-    if dry_run {
-        println!(
-            "[dry-run] would update {} from {} to {}",
-            path, current, target
-        );
+    let (primary_path, primary_kind) = &version_files[0];
+    let primary_doc = read_manifest(primary_path, *primary_kind)?;
+    let current = current_version(&primary_doc, *primary_kind)?;
+
+    let target = if let Some(custom_ver) = custom {
+        Version::parse(custom_ver)
+            .with_context(|| format!("parsing custom version `{}`", custom_ver))?
     } else {
-        write_version(&mut doc, kind, &target);
-        let output = match kind {
-            VersionFileKind::PackageJson => doc["__raw_json"]
-                .as_str()
-                .map(|s| format!("{}\n", s))
-                .unwrap_or_default(),
-            _ => doc.to_string(),
-        };
-        fs::write(&path, output).with_context(|| format!("writing {}", path))?;
-        println!("Updated {} to {}", path, target);
+        increment_version(&current, level)?
+    };
+
+    let mut staged_paths = Vec::new();
+
+    for (path, kind) in &version_files {
+        let mut doc = read_manifest(path, *kind)?;
+
+        if dry_run {
+            println!(
+                "[dry-run] would update {} from {} to {}",
+                path, current, target
+            );
+        } else {
+            write_version(&mut doc, *kind, &target);
+            let output = match kind {
+                VersionFileKind::PackageJson | VersionFileKind::TauriConf => doc["__raw_json"]
+                    .as_str()
+                    .map(|s| format!("{}\n", s))
+                    .unwrap_or_default(),
+                _ => doc.to_string(),
+            };
+            fs::write(path, output).with_context(|| format!("writing {}", path))?;
+            println!("Updated {} to {}", path, target);
+        }
+
+        staged_paths.push(path.clone());
     }
 
-    let mut staged_paths = vec![path.clone()];
+    Ok(BumpResult {
+        new_version: target,
+        changed_paths: staged_paths,
+    })
+}
+
+fn bump_version(config: &DevConfig, args: &VersionBump, dry_run: bool) -> Result<()> {
+    let result = perform_bump(config, args.level, args.custom.as_deref(), dry_run)?;
+
+    let mut staged_paths = result.changed_paths;
 
     if !args.no_changelog
         && let Some(changelog) = changelog_path(config)?
     {
-        update_changelog(&changelog, &target, dry_run)?;
+        update_changelog(&changelog, &result.new_version, dry_run)?;
         staged_paths.push(changelog);
     }
 
     if !args.no_commit {
         git_add(&staged_paths, dry_run)?;
-        let message = format!("chore: release {}", target);
+        let message = format!("chore: release {}", result.new_version);
         git_commit(&message, dry_run)?;
     }
 
     if args.tag {
-        let tag_name = format!("v{}", target);
+        let tag_name = format!("v{}", result.new_version);
         git_tag(&tag_name, dry_run)?;
     }
 
@@ -107,7 +149,7 @@ fn read_manifest(path: &Utf8Path, kind: VersionFileKind) -> Result<DocumentMut> 
         VersionFileKind::CargoToml | VersionFileKind::PyprojectToml => contents
             .parse::<DocumentMut>()
             .with_context(|| format!("parsing {}", path)),
-        VersionFileKind::PackageJson => {
+        VersionFileKind::PackageJson | VersionFileKind::TauriConf => {
             // Store raw JSON in a pseudo-TOML doc for uniform handling
             let mut doc = DocumentMut::new();
             doc["__raw_json"] = toml_edit::value(contents);
@@ -118,14 +160,27 @@ fn read_manifest(path: &Utf8Path, kind: VersionFileKind) -> Result<DocumentMut> 
 
 fn current_version(doc: &DocumentMut, kind: VersionFileKind) -> Result<Version> {
     match kind {
-        VersionFileKind::CargoToml => doc["package"]["version"]
-            .as_str()
-            .ok_or_else(|| anyhow!("missing package.version in Cargo.toml"))
-            .and_then(|s| Version::parse(s).with_context(|| format!("parsing version `{}`", s))),
-        VersionFileKind::PyprojectToml => doc["project"]["version"]
-            .as_str()
-            .ok_or_else(|| anyhow!("missing project.version in pyproject.toml"))
-            .and_then(|s| Version::parse(s).with_context(|| format!("parsing version `{}`", s))),
+        VersionFileKind::CargoToml => {
+            let ver_str = doc
+                .get("package")
+                .and_then(|p| p.get("version"))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    anyhow!(
+                        "missing package.version in Cargo.toml \
+                         (workspace roots need git.version_file in config)"
+                    )
+                })?;
+            Version::parse(ver_str).with_context(|| format!("parsing version `{}`", ver_str))
+        }
+        VersionFileKind::PyprojectToml => {
+            let ver_str = doc
+                .get("project")
+                .and_then(|p| p.get("version"))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing project.version in pyproject.toml"))?;
+            Version::parse(ver_str).with_context(|| format!("parsing version `{}`", ver_str))
+        }
         VersionFileKind::PackageJson => {
             let raw = doc["__raw_json"]
                 .as_str()
@@ -137,6 +192,17 @@ fn current_version(doc: &DocumentMut, kind: VersionFileKind) -> Result<Version> 
                 .ok_or_else(|| anyhow!("missing version in package.json"))?;
             Version::parse(ver_str).with_context(|| format!("parsing version `{}`", ver_str))
         }
+        VersionFileKind::TauriConf => {
+            let raw = doc["__raw_json"]
+                .as_str()
+                .ok_or_else(|| anyhow!("internal error: missing raw JSON"))?;
+            let json: serde_json::Value =
+                serde_json::from_str(raw).context("parsing tauri.conf.json")?;
+            let ver_str = json["version"]
+                .as_str()
+                .ok_or_else(|| anyhow!("missing version in tauri.conf.json"))?;
+            Version::parse(ver_str).with_context(|| format!("parsing version `{}`", ver_str))
+        }
     }
 }
 
@@ -144,14 +210,14 @@ fn write_version(doc: &mut DocumentMut, kind: VersionFileKind, version: &Version
     match kind {
         VersionFileKind::CargoToml => doc["package"]["version"] = value(version.to_string()),
         VersionFileKind::PyprojectToml => doc["project"]["version"] = value(version.to_string()),
-        VersionFileKind::PackageJson => {
+        VersionFileKind::PackageJson | VersionFileKind::TauriConf => {
             // Update version in the stored raw JSON
-            if let Some(raw) = doc["__raw_json"].as_str() {
-                if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(raw) {
-                    json["version"] = serde_json::Value::String(version.to_string());
-                    if let Ok(updated) = serde_json::to_string_pretty(&json) {
-                        doc["__raw_json"] = value(updated);
-                    }
+            if let Some(raw) = doc["__raw_json"].as_str()
+                && let Ok(mut json) = serde_json::from_str::<serde_json::Value>(raw)
+            {
+                json["version"] = serde_json::Value::String(version.to_string());
+                if let Ok(updated) = serde_json::to_string_pretty(&json) {
+                    doc["__raw_json"] = value(updated);
                 }
             }
         }
@@ -208,13 +274,112 @@ fn locate_version_file(config: &DevConfig) -> Result<(Utf8PathBuf, VersionFileKi
         return Ok((path, kind));
     }
 
+    // Check if this is a Tauri project (has src-tauri/tauri.conf.json)
+    let tauri_conf = cwd.join("src-tauri").join("tauri.conf.json");
+    if tauri_conf.exists() {
+        return Ok((tauri_conf, VersionFileKind::TauriConf));
+    }
+
     // Fall back to default based on configured language
     let (filename, kind) = match config.default_language.as_deref() {
         Some("python") => ("pyproject.toml", VersionFileKind::PyprojectToml),
         Some("typescript" | "javascript") => ("package.json", VersionFileKind::PackageJson),
         _ => ("Cargo.toml", VersionFileKind::CargoToml),
     };
-    Ok((cwd.join(filename), kind))
+    let path = cwd.join(filename);
+
+    // For Cargo.toml, check if this is a workspace root without a direct package version
+    if matches!(kind, VersionFileKind::CargoToml)
+        && path.exists()
+        && let Some(member_path) = find_workspace_member_version(&cwd, &path)?
+    {
+        return Ok((member_path, kind));
+    }
+
+    Ok((path, kind))
+}
+
+/// When a Cargo.toml is a workspace root without its own [package] version,
+/// find the first workspace member that has a version.
+fn find_workspace_member_version(
+    cwd: &Utf8Path,
+    cargo_toml: &Utf8Path,
+) -> Result<Option<Utf8PathBuf>> {
+    let contents =
+        fs::read_to_string(cargo_toml).with_context(|| format!("reading {}", cargo_toml))?;
+    let doc: DocumentMut = contents
+        .parse()
+        .with_context(|| format!("parsing {}", cargo_toml))?;
+
+    // Only applies if this is a workspace manifest
+    if doc.get("workspace").is_none() {
+        return Ok(None);
+    }
+
+    // If it also has a [package] with version, it's fine to use as-is
+    if doc
+        .get("package")
+        .and_then(|p| p.get("version"))
+        .and_then(|v| v.as_str())
+        .is_some()
+    {
+        return Ok(None);
+    }
+
+    // Get workspace members and find the first one with a version
+    let members = doc
+        .get("workspace")
+        .and_then(|w| w.get("members"))
+        .and_then(|m| m.as_array())
+        .ok_or_else(|| anyhow!("workspace manifest has no members array"))?;
+
+    for member in members.iter() {
+        let Some(member_str) = member.as_str() else {
+            continue;
+        };
+        let member_cargo = cwd.join(member_str).join("Cargo.toml");
+        if member_cargo.exists() {
+            let member_contents = fs::read_to_string(&member_cargo)
+                .with_context(|| format!("reading {}", member_cargo))?;
+            let member_doc: DocumentMut = member_contents
+                .parse()
+                .with_context(|| format!("parsing {}", member_cargo))?;
+            if member_doc
+                .get("package")
+                .and_then(|p| p.get("version"))
+                .and_then(|v| v.as_str())
+                .is_some()
+            {
+                return Ok(Some(member_cargo));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+/// For Tauri projects, returns all version files that should be updated together
+fn locate_tauri_version_files(cwd: &Utf8Path) -> Option<Vec<(Utf8PathBuf, VersionFileKind)>> {
+    let tauri_conf = cwd.join("src-tauri").join("tauri.conf.json");
+    if !tauri_conf.exists() {
+        return None;
+    }
+
+    let mut files = vec![(tauri_conf, VersionFileKind::TauriConf)];
+
+    // Also update package.json if it exists
+    let package_json = cwd.join("package.json");
+    if package_json.exists() {
+        files.push((package_json, VersionFileKind::PackageJson));
+    }
+
+    // Also update src-tauri/Cargo.toml if it exists
+    let cargo_toml = cwd.join("src-tauri").join("Cargo.toml");
+    if cargo_toml.exists() {
+        files.push((cargo_toml, VersionFileKind::CargoToml));
+    }
+
+    Some(files)
 }
 
 fn detect_version_file(path: &Utf8Path) -> Result<VersionFileKind> {
@@ -222,6 +387,7 @@ fn detect_version_file(path: &Utf8Path) -> Result<VersionFileKind> {
         Some("Cargo.toml") => Ok(VersionFileKind::CargoToml),
         Some("pyproject.toml") => Ok(VersionFileKind::PyprojectToml),
         Some("package.json") => Ok(VersionFileKind::PackageJson),
+        Some("tauri.conf.json") => Ok(VersionFileKind::TauriConf),
         Some(name) => bail!("unsupported version file `{}`", name),
         None => bail!("version file must not be a directory"),
     }
@@ -262,7 +428,7 @@ fn update_changelog(path: &Utf8Path, version: &Version, dry_run: bool) -> Result
     Ok(())
 }
 
-fn changelog_path(config: &DevConfig) -> Result<Option<Utf8PathBuf>> {
+pub fn changelog_path(config: &DevConfig) -> Result<Option<Utf8PathBuf>> {
     let cwd = Utf8PathBuf::from_path_buf(
         std::env::current_dir().context("determining current directory")?,
     )
@@ -355,6 +521,7 @@ enum VersionFileKind {
     CargoToml,
     PyprojectToml,
     PackageJson,
+    TauriConf,
 }
 
 const DEFAULT_BASE_BRANCH: &str = "release-candidate";

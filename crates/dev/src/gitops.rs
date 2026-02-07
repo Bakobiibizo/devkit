@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, anyhow, bail};
+use camino::Utf8Path;
 use std::process::Command;
 
 const DEFAULT_BASE_BRANCH: &str = "release-candidate";
@@ -6,6 +7,7 @@ const DEFAULT_MAIN_BRANCH: &str = "main";
 
 use crate::cli::{BranchCreate, BranchFinalize, ReleasePr};
 use crate::config::DevConfig;
+use crate::versioning;
 
 pub fn branch_create(args: &BranchCreate, dry_run: bool) -> Result<()> {
     if !args.allow_dirty && !dry_run {
@@ -98,14 +100,13 @@ pub fn branch_finalize(args: &BranchFinalize, dry_run: bool) -> Result<()> {
 
     // Warn if --delete was passed (deprecated, deletion now happens via GitHub)
     if args.delete {
-        println!("Note: --delete is deprecated. Branch deletion now happens via GitHub after PR merge.");
+        println!(
+            "Note: --delete is deprecated. Branch deletion now happens via GitHub after PR merge."
+        );
     }
 
     run_steps(&steps, dry_run)?;
-    println!(
-        "Created PR for `{}` into `{}`.",
-        branch, base
-    );
+    println!("Created PR for `{}` into `{}`.", branch, base);
     println!("Review and merge via GitHub, then delete the branch if desired.");
     Ok(())
 }
@@ -136,36 +137,70 @@ pub fn release_pr(args: &ReleasePr, dry_run: bool, config: &DevConfig) -> Result
         })
         .unwrap_or(DEFAULT_BASE_BRANCH);
 
+    // Fetch and ensure we're on the head branch
+    run_steps(
+        &[
+            vec![
+                "git".into(),
+                "fetch".into(),
+                "--all".into(),
+                "--prune".into(),
+            ],
+            vec!["git".into(), "checkout".into(), head.into()],
+            vec![
+                "git".into(),
+                "pull".into(),
+                "--rebase".into(),
+                "origin".into(),
+                head.into(),
+            ],
+        ],
+        dry_run,
+    )?;
+
     let commits = collect_commits(base, head)?;
     if commits.is_empty() {
         println!(
-            "No commits between {} and {}; skipping PR creation.",
+            "No commits between {} and {}; skipping release.",
             base, head
         );
         return Ok(());
     }
 
-    let mut steps = vec![vec![
-        "git".into(),
-        "fetch".into(),
-        "--all".into(),
-        "--prune".into(),
-    ]];
-    steps.push(vec!["git".into(), "checkout".into(), head.into()]);
-    steps.push(vec![
-        "git".into(),
-        "pull".into(),
-        "--rebase".into(),
-        "origin".into(),
-        head.into(),
-    ]);
-    steps.push(vec![
-        "git".into(),
-        "push".into(),
-        "origin".into(),
-        head.into(),
-    ]);
-    steps.push(vec![
+    // Bump version
+    let bump_result = versioning::perform_bump(config, args.bump, None, dry_run)?;
+
+    // Update changelog with actual commit messages
+    let changelog = versioning::changelog_path(config)?;
+    if let Some(ref cl) = changelog {
+        update_release_changelog(cl, &bump_result.new_version, &commits, dry_run)?;
+    }
+
+    // Stage and commit all changes
+    let mut paths_to_stage: Vec<String> = bump_result
+        .changed_paths
+        .iter()
+        .map(|p| p.to_string())
+        .collect();
+    if let Some(ref cl) = changelog {
+        paths_to_stage.push(cl.to_string());
+    }
+
+    let mut add_args: Vec<String> = vec!["git".into(), "add".into()];
+    add_args.extend(paths_to_stage);
+    let commit_msg = format!("chore: release v{}", bump_result.new_version);
+
+    run_steps(
+        &[
+            add_args,
+            vec!["git".into(), "commit".into(), "-m".into(), commit_msg],
+        ],
+        dry_run,
+    )?;
+
+    // Push and create PR
+    let title = format!("chore: release v{}", bump_result.new_version);
+    let mut pr_step = vec![
         "gh".into(),
         "pr".into(),
         "create".into(),
@@ -173,17 +208,26 @@ pub fn release_pr(args: &ReleasePr, dry_run: bool, config: &DevConfig) -> Result
         base.into(),
         "--head".into(),
         head.into(),
+        "--title".into(),
+        title,
         "--fill".into(),
-    ]);
+    ];
     if args.no_open {
-        if let Some(step) = steps.last_mut() {
-            step.push("--no-open".into());
-        }
+        pr_step.push("--no-open".into());
     }
 
-    run_steps(&steps, dry_run)?;
-    update_changelog(base, head, &commits, dry_run)?;
-    println!("Prepared release PR from `{}` into `{}`.", head, base);
+    run_steps(
+        &[
+            vec!["git".into(), "push".into(), "origin".into(), head.into()],
+            pr_step,
+        ],
+        dry_run,
+    )?;
+
+    println!(
+        "Released v{} — PR from `{}` into `{}`.",
+        bump_result.new_version, head, base
+    );
     Ok(())
 }
 
@@ -259,23 +303,18 @@ fn collect_commits(base: &str, head: &str) -> Result<Vec<String>> {
     Ok(commits)
 }
 
-fn update_changelog(base: &str, head: &str, commits: &[String], dry_run: bool) -> Result<()> {
-    if commits.is_empty() {
-        println!("No commits between {} and {}.", base, head);
-        return Ok(());
-    }
-
+fn update_release_changelog(
+    path: &Utf8Path,
+    version: &semver::Version,
+    commits: &[String],
+    dry_run: bool,
+) -> Result<()> {
     use chrono::Utc;
     use std::fs;
     use std::io::Write;
 
-    let changelog_path = std::env::current_dir()
-        .context("reading current directory")?
-        .join("CHANGELOG.md");
-
-    let mut section = String::new();
     let date = Utc::now().format("%Y-%m-%d");
-    section.push_str(&format!("## {} ({base} → {head})\n\n", date));
+    let mut section = format!("## {} - v{}\n\n", date, version);
     for commit in commits {
         section.push_str("- ");
         section.push_str(commit);
@@ -284,25 +323,32 @@ fn update_changelog(base: &str, head: &str, commits: &[String], dry_run: bool) -
     section.push('\n');
 
     if dry_run {
-        println!(
-            "[dry-run] update {} with:\n{}",
-            changelog_path.display(),
-            section
-        );
+        println!("[dry-run] update {} with:\n{}", path, section);
         return Ok(());
     }
 
-    let mut existing = if changelog_path.exists() {
-        fs::read_to_string(&changelog_path)
-            .with_context(|| format!("reading {}", changelog_path.display()))?
+    let mut content = if path.exists() {
+        fs::read_to_string(path).with_context(|| format!("reading {}", path))?
     } else {
-        String::from("# Changelog\n\n")
+        String::from("# Changelog\n\n## Unreleased\n\n")
     };
 
-    existing.push_str(&section);
-    fs::File::create(&changelog_path)
-        .with_context(|| format!("opening {}", changelog_path.display()))?
-        .write_all(existing.as_bytes())
-        .with_context(|| format!("writing {}", changelog_path.display()))?;
+    if let Some(idx) = content.find("## Unreleased") {
+        let insert_at = content[idx..]
+            .find('\n')
+            .map(|offset| idx + offset + 1)
+            .unwrap_or(content.len());
+        content.insert_str(insert_at, &format!("\n{}", section));
+    } else {
+        if !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str(&section);
+    }
+
+    let mut file =
+        fs::File::create(path.as_std_path()).with_context(|| format!("opening {}", path))?;
+    file.write_all(content.as_bytes())
+        .with_context(|| format!("writing {}", path))?;
     Ok(())
 }

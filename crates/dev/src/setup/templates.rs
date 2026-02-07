@@ -120,11 +120,14 @@ pub fn install_pm2_service(ctx: &SetupContext) -> Result<()> {
 
     // Write startup script
     let script_path = setup_dir.join("pm2-startup.sh");
-    ctx.log.ok(component, &format!("Creating startup script at {}", script_path.display()));
+    ctx.log.ok(
+        component,
+        &format!("Creating startup script at {}", script_path.display()),
+    );
 
     if !ctx.dry_run {
         std::fs::write(&script_path, PM2_STARTUP_SCRIPT)?;
-        
+
         // Make executable
         #[cfg(unix)]
         {
@@ -134,7 +137,10 @@ pub fn install_pm2_service(ctx: &SetupContext) -> Result<()> {
             std::fs::set_permissions(&script_path, perms)?;
         }
     } else {
-        ctx.log.dry_run(component, &format!("Write startup script to {}", script_path.display()));
+        ctx.log.dry_run(
+            component,
+            &format!("Write startup script to {}", script_path.display()),
+        );
         ctx.log.dry_run(component, "chmod +x pm2-startup.sh");
     }
 
@@ -142,7 +148,10 @@ pub fn install_pm2_service(ctx: &SetupContext) -> Result<()> {
     let service_content = generate_pm2_service(&user, &home, script_path.to_str().unwrap());
     let service_path = "/etc/systemd/system/pm2-resurrect.service";
 
-    ctx.log.ok(component, &format!("Creating systemd service at {}", service_path));
+    ctx.log.ok(
+        component,
+        &format!("Creating systemd service at {}", service_path),
+    );
 
     if !ctx.dry_run {
         let temp_path = format!("/tmp/pm2-resurrect.service.{}", std::process::id());
@@ -157,7 +166,10 @@ pub fn install_pm2_service(ctx: &SetupContext) -> Result<()> {
                 .arg(service_path),
         )?;
     } else {
-        ctx.log.dry_run(component, &format!("Write systemd service to {}", service_path));
+        ctx.log.dry_run(
+            component,
+            &format!("Write systemd service to {}", service_path),
+        );
     }
 
     // Reload systemd
@@ -189,8 +201,12 @@ pub fn install_pm2_service(ctx: &SetupContext) -> Result<()> {
             .arg("pm2-resurrect"),
     )?;
 
-    ctx.log.ok(component, "PM2 systemd service installed successfully");
-    ctx.log.ok(component, "Check status with: systemctl status pm2-resurrect");
+    ctx.log
+        .ok(component, "PM2 systemd service installed successfully");
+    ctx.log.ok(
+        component,
+        "Check status with: systemctl status pm2-resurrect",
+    );
 
     Ok(())
 }

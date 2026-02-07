@@ -7,23 +7,23 @@ pub fn detect_nvidia_container_runtime(ctx: &SetupContext) -> Result<InstallStat
     // Check if nvidia-container-cli exists
     if ctx.command_exists("nvidia-container-cli") {
         // Check docker info for nvidia runtime
-        let output = std::process::Command::new("docker")
-            .arg("info")
-            .output();
+        let output = std::process::Command::new("docker").arg("info").output();
 
-        if let Ok(output) = output {
-            if output.status.success() {
-                let info = String::from_utf8_lossy(&output.stdout);
-                if info.contains("nvidia") {
-                    return Ok(InstallState::Installed {
-                        version: None,
-                        details: vec!["nvidia runtime configured in docker".to_string()],
-                    });
-                } else {
-                    return Ok(InstallState::Partial {
-                        reasons: vec!["nvidia-container-cli present but runtime not configured".to_string()],
-                    });
-                }
+        if let Ok(output) = output
+            && output.status.success()
+        {
+            let info = String::from_utf8_lossy(&output.stdout);
+            if info.contains("nvidia") {
+                return Ok(InstallState::Installed {
+                    version: None,
+                    details: vec!["nvidia runtime configured in docker".to_string()],
+                });
+            } else {
+                return Ok(InstallState::Partial {
+                    reasons: vec![
+                        "nvidia-container-cli present but runtime not configured".to_string(),
+                    ],
+                });
             }
         }
 
@@ -43,7 +43,8 @@ pub fn install_nvidia_container_runtime(ctx: &SetupContext) -> Result<()> {
         anyhow::bail!("Docker is required but not installed");
     }
 
-    ctx.log.ok(component, "Adding NVIDIA container toolkit repository");
+    ctx.log
+        .ok(component, "Adding NVIDIA container toolkit repository");
 
     // Download GPG key
     if !ctx.dry_run {
@@ -70,7 +71,8 @@ pub fn install_nvidia_container_runtime(ctx: &SetupContext) -> Result<()> {
             anyhow::bail!("Failed to add NVIDIA container toolkit repository");
         }
     } else {
-        ctx.log.dry_run(component, "Add NVIDIA container toolkit repository");
+        ctx.log
+            .dry_run(component, "Add NVIDIA container toolkit repository");
     }
 
     ctx.execute(
@@ -112,7 +114,8 @@ pub fn install_nvidia_container_runtime(ctx: &SetupContext) -> Result<()> {
             .arg("docker"),
     )?;
 
-    ctx.log.ok(component, "NVIDIA container runtime installed successfully");
+    ctx.log
+        .ok(component, "NVIDIA container runtime installed successfully");
 
     Ok(())
 }
@@ -126,68 +129,66 @@ pub fn detect_cuda_toolkit_host(ctx: &SetupContext) -> Result<InstallState> {
             .arg("--format=csv,noheader")
             .output();
 
-        if let Ok(output) = output {
-            if output.status.success() {
-                let info = String::from_utf8_lossy(&output.stdout);
-                let parts: Vec<&str> = info.trim().split(',').collect();
-                
-                if parts.len() >= 2 {
-                    let driver = parts[0].trim();
-                    let sm = parts[1].trim();
+        if let Ok(output) = output
+            && output.status.success()
+        {
+            let info = String::from_utf8_lossy(&output.stdout);
+            let parts: Vec<&str> = info.trim().split(',').collect();
 
-                    // Check for CUDA installation
-                    let cuda_path = std::path::Path::new("/usr/local/cuda");
-                    if cuda_path.exists() {
-                        // Try to get CUDA version
-                        let nvcc_output = std::process::Command::new("nvcc")
-                            .arg("--version")
-                            .output();
+            if parts.len() >= 2 {
+                let driver = parts[0].trim();
+                let sm = parts[1].trim();
 
-                        if let Ok(nvcc_output) = nvcc_output {
-                            if nvcc_output.status.success() {
-                                let version_text = String::from_utf8_lossy(&nvcc_output.stdout);
-                                // Parse version from output like "release 12.0, V12.0.140"
-                                let version = version_text
-                                    .lines()
-                                    .find(|line| line.contains("release"))
-                                    .and_then(|line| {
-                                        line.split("release")
-                                            .nth(1)?
-                                            .split(',')
-                                            .next()?
-                                            .trim()
-                                            .to_string()
-                                            .into()
-                                    });
+                // Check for CUDA installation
+                let cuda_path = std::path::Path::new("/usr/local/cuda");
+                if cuda_path.exists() {
+                    // Try to get CUDA version
+                    let nvcc_output = std::process::Command::new("nvcc").arg("--version").output();
 
-                                return Ok(InstallState::Installed {
-                                    version,
-                                    details: vec![
-                                        format!("driver: {}", driver),
-                                        format!("compute capability: {}", sm),
-                                    ],
-                                });
-                            }
-                        }
+                    if let Ok(nvcc_output) = nvcc_output
+                        && nvcc_output.status.success()
+                    {
+                        let version_text = String::from_utf8_lossy(&nvcc_output.stdout);
+                        // Parse version from output like "release 12.0, V12.0.140"
+                        let version = version_text
+                            .lines()
+                            .find(|line| line.contains("release"))
+                            .and_then(|line| {
+                                line.split("release")
+                                    .nth(1)?
+                                    .split(',')
+                                    .next()?
+                                    .trim()
+                                    .to_string()
+                                    .into()
+                            });
 
-                        // CUDA directory exists but nvcc not working
-                        return Ok(InstallState::PresentButUnknown {
-                            reasons: vec![
-                                "CUDA directory exists but version not parseable".to_string(),
-                                format!("driver: {}", driver),
-                                format!("compute capability: {}", sm),
-                            ],
-                        });
-                    } else {
-                        // nvidia-smi works but no CUDA toolkit
-                        return Ok(InstallState::Partial {
-                            reasons: vec![
-                                "NVIDIA driver present but CUDA toolkit not installed".to_string(),
+                        return Ok(InstallState::Installed {
+                            version,
+                            details: vec![
                                 format!("driver: {}", driver),
                                 format!("compute capability: {}", sm),
                             ],
                         });
                     }
+
+                    // CUDA directory exists but nvcc not working
+                    return Ok(InstallState::PresentButUnknown {
+                        reasons: vec![
+                            "CUDA directory exists but version not parseable".to_string(),
+                            format!("driver: {}", driver),
+                            format!("compute capability: {}", sm),
+                        ],
+                    });
+                } else {
+                    // nvidia-smi works but no CUDA toolkit
+                    return Ok(InstallState::Partial {
+                        reasons: vec![
+                            "NVIDIA driver present but CUDA toolkit not installed".to_string(),
+                            format!("driver: {}", driver),
+                            format!("compute capability: {}", sm),
+                        ],
+                    });
                 }
             }
         }
@@ -210,35 +211,56 @@ pub fn install_cuda_toolkit_host(ctx: &SetupContext) -> Result<()> {
 
     match state {
         InstallState::Installed { version, details } => {
-            ctx.log.ok(component, &format!("CUDA toolkit already installed: {:?}", version));
+            ctx.log.ok(
+                component,
+                &format!("CUDA toolkit already installed: {:?}", version),
+            );
             for detail in details {
                 ctx.log.ok(component, &detail);
             }
-            return Ok(());
+            Ok(())
         }
         InstallState::PresentButUnknown { reasons } => {
-            ctx.log.warn(component, "CUDA installation detected but layout is non-standard (possibly OEM-provisioned)");
+            ctx.log.warn(
+                component,
+                "CUDA installation detected but layout is non-standard (possibly OEM-provisioned)",
+            );
             for reason in reasons {
                 ctx.log.warn(component, &reason);
             }
-            ctx.log.warn(component, "Refusing to auto-install to protect existing setup");
-            ctx.log.warn(component, "Use --install-cuda-toolkit with explicit confirmation if you want to proceed");
-            return Ok(());
+            ctx.log.warn(
+                component,
+                "Refusing to auto-install to protect existing setup",
+            );
+            ctx.log.warn(
+                component,
+                "Use --install-cuda-toolkit with explicit confirmation if you want to proceed",
+            );
+            Ok(())
         }
         InstallState::Partial { reasons } => {
-            ctx.log.warn(component, "Partial CUDA installation detected:");
+            ctx.log
+                .warn(component, "Partial CUDA installation detected:");
             for reason in reasons {
                 ctx.log.warn(component, &reason);
             }
-            ctx.log.warn(component, "This component validates only by default");
-            ctx.log.warn(component, "Use --install-cuda-toolkit to actually install CUDA toolkit");
-            return Ok(());
+            ctx.log
+                .warn(component, "This component validates only by default");
+            ctx.log.warn(
+                component,
+                "Use --install-cuda-toolkit to actually install CUDA toolkit",
+            );
+            Ok(())
         }
         InstallState::NotInstalled => {
             ctx.log.warn(component, "No CUDA installation detected");
-            ctx.log.warn(component, "This component validates only by default");
-            ctx.log.warn(component, "Use --install-cuda-toolkit to actually install CUDA toolkit");
-            return Ok(());
+            ctx.log
+                .warn(component, "This component validates only by default");
+            ctx.log.warn(
+                component,
+                "Use --install-cuda-toolkit to actually install CUDA toolkit",
+            );
+            Ok(())
         }
     }
 }

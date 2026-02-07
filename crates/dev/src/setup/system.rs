@@ -37,17 +37,15 @@ pub fn detect_system_packages(ctx: &SetupContext) -> Result<InstallState> {
 /// Install system packages
 pub fn install_system_packages(ctx: &SetupContext) -> Result<()> {
     let component = "system_packages";
-    
+
     ctx.log.ok(component, "Updating package lists");
     ctx.execute(
         component,
-        std::process::Command::new("sudo")
-            .arg("apt")
-            .arg("update"),
+        std::process::Command::new("sudo").arg("apt").arg("update"),
     )?;
 
     ctx.log.ok(component, "Installing system dependencies");
-    
+
     let packages = vec![
         "build-essential",
         "libssl-dev",
@@ -82,7 +80,8 @@ pub fn install_system_packages(ctx: &SetupContext) -> Result<()> {
             .args(&packages),
     )?;
 
-    ctx.log.ok(component, "System packages installed successfully");
+    ctx.log
+        .ok(component, "System packages installed successfully");
     Ok(())
 }
 
@@ -123,9 +122,7 @@ pub fn install_git_lfs(ctx: &SetupContext) -> Result<()> {
     ctx.log.ok(component, "Initializing Git LFS");
     ctx.execute(
         component,
-        std::process::Command::new("git")
-            .arg("lfs")
-            .arg("install"),
+        std::process::Command::new("git").arg("lfs").arg("install"),
     )?;
 
     ctx.log.ok(component, "Git LFS initialized successfully");
@@ -135,9 +132,7 @@ pub fn install_git_lfs(ctx: &SetupContext) -> Result<()> {
 /// Detect uv
 pub fn detect_uv(ctx: &SetupContext) -> Result<InstallState> {
     if ctx.command_exists("uv") {
-        let output = std::process::Command::new("uv")
-            .arg("--version")
-            .output()?;
+        let output = std::process::Command::new("uv").arg("--version").output()?;
 
         if output.status.success() {
             let version = String::from_utf8_lossy(&output.stdout);
@@ -163,9 +158,10 @@ pub fn install_uv(ctx: &SetupContext) -> Result<()> {
     }
 
     ctx.log.ok(component, "Installing uv");
-    
+
     if ctx.dry_run {
-        ctx.log.dry_run(component, "curl -LsSf https://astral.sh/uv/install.sh | sh");
+        ctx.log
+            .dry_run(component, "curl -LsSf https://astral.sh/uv/install.sh | sh");
         return Ok(());
     }
 
@@ -214,9 +210,12 @@ pub fn install_rustup(ctx: &SetupContext) -> Result<()> {
     }
 
     ctx.log.ok(component, "Installing Rust via rustup");
-    
+
     if ctx.dry_run {
-        ctx.log.dry_run(component, "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y");
+        ctx.log.dry_run(
+            component,
+            "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
+        );
         return Ok(());
     }
 
@@ -274,10 +273,16 @@ pub fn install_node(ctx: &SetupContext) -> Result<()> {
     }
 
     ctx.log.ok(component, "Installing nvm");
-    
+
     if ctx.dry_run {
-        ctx.log.dry_run(component, "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash");
-        ctx.log.dry_run(component, &format!("nvm install {}", ctx.config.node_version));
+        ctx.log.dry_run(
+            component,
+            "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash",
+        );
+        ctx.log.dry_run(
+            component,
+            &format!("nvm install {}", ctx.config.node_version),
+        );
         return Ok(());
     }
 
@@ -296,8 +301,10 @@ pub fn install_node(ctx: &SetupContext) -> Result<()> {
 
     // Install Node.js via nvm
     let home = std::env::var("HOME")?;
-    let nvm_script = format!("export NVM_DIR=\"$HOME/.nvm\" && [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\" && nvm install {} && nvm use {}", 
-        ctx.config.node_version, ctx.config.node_version);
+    let nvm_script = format!(
+        "export NVM_DIR=\"$HOME/.nvm\" && [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\" && nvm install {} && nvm use {}",
+        ctx.config.node_version, ctx.config.node_version
+    );
 
     let output = std::process::Command::new("bash")
         .arg("-c")
@@ -310,7 +317,10 @@ pub fn install_node(ctx: &SetupContext) -> Result<()> {
         anyhow::bail!("Failed to install Node.js: {}", stderr);
     }
 
-    ctx.log.ok(component, &format!("Node.js {} installed successfully", ctx.config.node_version));
+    ctx.log.ok(
+        component,
+        &format!("Node.js {} installed successfully", ctx.config.node_version),
+    );
     Ok(())
 }
 
@@ -361,12 +371,10 @@ pub fn install_pnpm(ctx: &SetupContext) -> Result<()> {
     // Check if node is available via NVM
     let home = std::env::var("HOME")?;
     let nvm_script = format!("{}/.nvm/nvm.sh", home);
-    
+
     let has_node = if std::path::Path::new(&nvm_script).exists() {
         // Try with NVM loaded
-        let check_cmd = format!(
-            "export NVM_DIR=\"$HOME/.nvm\" && [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\" && command -v node"
-        );
+        let check_cmd = "export NVM_DIR=\"$HOME/.nvm\" && [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\" && command -v node".to_string();
         std::process::Command::new("bash")
             .arg("-c")
             .arg(&check_cmd)
@@ -382,17 +390,18 @@ pub fn install_pnpm(ctx: &SetupContext) -> Result<()> {
     }
 
     ctx.log.ok(component, "Installing pnpm");
-    
+
     if ctx.dry_run {
-        ctx.log.dry_run(component, "curl -fsSL https://get.pnpm.io/install.sh | sh -");
+        ctx.log.dry_run(
+            component,
+            "curl -fsSL https://get.pnpm.io/install.sh | sh -",
+        );
         return Ok(());
     }
 
     // Install pnpm with NVM environment loaded if needed
     let install_cmd = if std::path::Path::new(&nvm_script).exists() {
-        format!(
-            "export NVM_DIR=\"$HOME/.nvm\" && [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\" && curl -fsSL https://get.pnpm.io/install.sh | sh -"
-        )
+        "export NVM_DIR=\"$HOME/.nvm\" && [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\" && curl -fsSL https://get.pnpm.io/install.sh | sh -".to_string()
     } else {
         "curl -fsSL https://get.pnpm.io/install.sh | sh -".to_string()
     };
@@ -409,7 +418,10 @@ pub fn install_pnpm(ctx: &SetupContext) -> Result<()> {
     }
 
     ctx.log.ok(component, "pnpm installed successfully");
-    ctx.log.warn(component, "Add pnpm to PATH: export PATH=\"$HOME/.local/share/pnpm:$PATH\"");
+    ctx.log.warn(
+        component,
+        "Add pnpm to PATH: export PATH=\"$HOME/.local/share/pnpm:$PATH\"",
+    );
     Ok(())
 }
 
@@ -423,10 +435,11 @@ pub fn detect_pm2(ctx: &SetupContext) -> Result<InstallState> {
         if output.status.success() {
             let version = String::from_utf8_lossy(&output.stdout);
             let version_str = version.trim().to_string();
-            
+
             // Check if systemd service exists
-            let service_exists = std::path::Path::new("/etc/systemd/system/pm2-resurrect.service").exists();
-            
+            let service_exists =
+                std::path::Path::new("/etc/systemd/system/pm2-resurrect.service").exists();
+
             if service_exists {
                 Ok(InstallState::Installed {
                     version: Some(version_str),
@@ -454,7 +467,7 @@ pub fn install_pm2(ctx: &SetupContext) -> Result<()> {
     }
 
     ctx.log.ok(component, "Installing PM2");
-    
+
     if ctx.dry_run {
         ctx.log.dry_run(component, "pnpm install -g pm2");
     } else {
@@ -471,14 +484,15 @@ pub fn install_pm2(ctx: &SetupContext) -> Result<()> {
     }
 
     ctx.log.ok(component, "PM2 installed successfully");
-    
+
     // Install systemd service
     if super::templates::detect_pm2_service()? {
-        ctx.log.ok(component, "PM2 systemd service already installed");
+        ctx.log
+            .ok(component, "PM2 systemd service already installed");
     } else {
         ctx.log.ok(component, "Installing PM2 systemd service");
         super::templates::install_pm2_service(ctx)?;
     }
-    
+
     Ok(())
 }

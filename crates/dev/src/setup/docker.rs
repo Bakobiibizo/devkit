@@ -22,9 +22,8 @@ pub fn detect_docker(ctx: &SetupContext) -> Result<InstallState> {
             let service_active = service_output.status.success();
 
             // Check if user is in docker group
-            let groups_output = std::process::Command::new("groups")
-                .output()?;
-            
+            let groups_output = std::process::Command::new("groups").output()?;
+
             let in_docker_group = if groups_output.status.success() {
                 let groups = String::from_utf8_lossy(&groups_output.stdout);
                 groups.contains("docker")
@@ -130,14 +129,23 @@ pub fn install_docker(ctx: &SetupContext) -> Result<()> {
     if !ctx.dry_run {
         let output = std::process::Command::new("sh")
             .arg("-c")
-            .arg(format!("echo '{}' | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null", repo_line))
+            .arg(format!(
+                "echo '{}' | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null",
+                repo_line
+            ))
             .output()?;
 
         if !output.status.success() {
             anyhow::bail!("Failed to add Docker repository");
         }
     } else {
-        ctx.log.dry_run(component, &format!("echo '{}' | sudo tee /etc/apt/sources.list.d/docker.list", repo_line));
+        ctx.log.dry_run(
+            component,
+            &format!(
+                "echo '{}' | sudo tee /etc/apt/sources.list.d/docker.list",
+                repo_line
+            ),
+        );
     }
 
     ctx.execute(
@@ -185,7 +193,7 @@ pub fn install_docker(ctx: &SetupContext) -> Result<()> {
     // Set permissions on docker directory
     let home = std::env::var("HOME")?;
     let docker_dir = format!("{}/.docker", home);
-    
+
     if std::path::Path::new(&docker_dir).exists() {
         ctx.execute(
             component,
@@ -233,7 +241,10 @@ pub fn install_docker(ctx: &SetupContext) -> Result<()> {
     )?;
 
     ctx.log.ok(component, "Docker installed successfully");
-    ctx.log.warn(component, "You may need to log out and back in for group membership to take effect");
+    ctx.log.warn(
+        component,
+        "You may need to log out and back in for group membership to take effect",
+    );
 
     Ok(())
 }

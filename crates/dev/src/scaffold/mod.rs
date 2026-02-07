@@ -2,9 +2,9 @@ pub mod python;
 pub mod rust;
 pub mod typescript;
 
+use crate::templates;
 use anyhow::{Result, bail};
 use camino::Utf8Path;
-use crate::templates;
 
 pub fn install(language: &str) -> Result<()> {
     match language {
