@@ -1484,6 +1484,16 @@ impl CliContext {
     }
 
     fn resolve_config_path(&self) -> Result<ResolvedConfigPath> {
+        /// Return the platform suffix for config file selection.
+        fn platform_config_suffix() -> &'static str {
+            match std::env::consts::OS {
+                "linux" => "linux",
+                "windows" => "windows",
+                "macos" => "macos",
+                _ => "linux",
+            }
+        }
+
         if let Some(path) = &self.file {
             let path = Utf8PathBuf::from_path_buf(path.clone())
                 .map_err(|_| anyhow!("config path must be valid UTF-8"))?;
@@ -1496,10 +1506,30 @@ impl CliContext {
         if let Ok(cwd) = std::env::current_dir() {
             if let Ok(mut dir) = Utf8PathBuf::from_path_buf(cwd) {
                 loop {
+                    let platform_suffix = platform_config_suffix();
+
+                    // .dev/ path — platform-specific first, then generic
+                    let platform_preferred = dir.join(".dev").join(format!("config.{}.toml", platform_suffix));
+                    if platform_preferred.exists() {
+                        return Ok(ResolvedConfigPath {
+                            path: platform_preferred,
+                            source: ConfigPathSource::Discovered,
+                        });
+                    }
+
                     let preferred = dir.join(".dev").join("config.toml");
                     if preferred.exists() {
                         return Ok(ResolvedConfigPath {
                             path: preferred,
+                            source: ConfigPathSource::Discovered,
+                        });
+                    }
+
+                    // Legacy tools/dev/ path — same priority
+                    let legacy_platform = dir.join("tools").join("dev").join(format!("config.{}.toml", platform_suffix));
+                    if legacy_platform.exists() {
+                        return Ok(ResolvedConfigPath {
+                            path: legacy_platform,
                             source: ConfigPathSource::Discovered,
                         });
                     }
@@ -1521,10 +1551,18 @@ impl CliContext {
         }
 
         let home = dirs::home_dir().ok_or_else(|| anyhow!("unable to determine home directory"))?;
-        let mut path = home;
-        path.push(".dev");
-        path.push("config.toml");
-        let path = Utf8PathBuf::from_path_buf(path).map_err(|_| anyhow!("config path must be valid UTF-8"))?;
+        let dev_dir = Utf8PathBuf::from_path_buf(home.join(".dev"))
+            .map_err(|_| anyhow!("config path must be valid UTF-8"))?;
+
+        let platform_path = dev_dir.join(format!("config.{}.toml", platform_config_suffix()));
+        if platform_path.exists() {
+            return Ok(ResolvedConfigPath {
+                path: platform_path,
+                source: ConfigPathSource::HomeDefault,
+            });
+        }
+
+        let path = dev_dir.join("config.toml");
         Ok(ResolvedConfigPath {
             path,
             source: ConfigPathSource::HomeDefault,

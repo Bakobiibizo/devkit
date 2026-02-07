@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Workflow Rules
+
+- **Always perform a hand-off before going into planning mode.** Planning mode wipes your context before you start building so you will lose any context not recorded.
+
 ## Project Overview
 
 Devkit is a Rust workspace containing two crates:
