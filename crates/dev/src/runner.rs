@@ -11,9 +11,9 @@ use clap::Parser;
 
 use crate::cli::{
     Cli, Command, ConfigCommand, DockerBuildArgs, DockerCommand, DockerComposeCommand,
-    DockerComposeUpBuildArgs, DockerComposeUpCommand, DockerInitArgs, EnvArgs, EnvCommand,
-    GitCommand, InstallArgs, KubeCommand, LanguageCommand, OsCommand, SetupCommand, StartArgs,
-    VaultCommand, Verb, VersionCommand,
+    DockerComposeUpCommand, DockerComposeUpBuildArgs, DockerInitArgs, EnvArgs, EnvCommand,
+    GitCommand, InstallArgs, KubeCommand, LanguageCommand, SetupCommand, StartArgs, VaultCommand,
+    Verb, VersionCommand,
 };
 use crate::config::{DevConfig, TaskUpdateMode};
 use crate::envfile;
@@ -35,11 +35,12 @@ fn config_root_dir(config_path: &Utf8PathBuf) -> PathBuf {
         return parent.parent().unwrap_or(parent).to_path_buf();
     }
 
-    if parent.file_name() == Some(std::ffi::OsStr::new("dev"))
-        && let Some(tools) = parent.parent()
-        && tools.file_name() == Some(std::ffi::OsStr::new("tools"))
-    {
-        return tools.parent().unwrap_or(tools).to_path_buf();
+    if parent.file_name() == Some(std::ffi::OsStr::new("dev")) {
+        if let Some(tools) = parent.parent() {
+            if tools.file_name() == Some(std::ffi::OsStr::new("tools")) {
+                return tools.parent().unwrap_or(tools).to_path_buf();
+            }
+        }
     }
 
     parent.to_path_buf()
@@ -66,21 +67,13 @@ fn handle_kube(state: &AppState, command: KubeCommand) -> Result<()> {
             Ok(())
         }
         KubeCommand::Contexts => kube_cmd(&["kubectl", "config", "get-contexts"], state),
-        KubeCommand::Use { context } => kube_cmd(
-            &["kubectl", "config", "use-context", context.as_str()],
-            state,
-        ),
+        KubeCommand::Use { context } => {
+            kube_cmd(&["kubectl", "config", "use-context", context.as_str()], state)
+        }
         KubeCommand::Current => kube_cmd(&["kubectl", "config", "current-context"], state),
         KubeCommand::Namespaces => kube_cmd(&["kubectl", "get", "namespaces"], state),
         KubeCommand::SetNamespace { namespace } => kube_cmd(
-            &[
-                "kubectl",
-                "config",
-                "set-context",
-                "--current",
-                "--namespace",
-                namespace.as_str(),
-            ],
+            &["kubectl", "config", "set-context", "--current", "--namespace", namespace.as_str()],
             state,
         ),
     }
@@ -99,11 +92,7 @@ fn kube_cmd(argv: &[&str], state: &AppState) -> Result<()> {
     if status.success() {
         Ok(())
     } else {
-        bail!(
-            "command `{}` failed with exit code {:?}",
-            printable,
-            status.code()
-        )
+        bail!("command `{}` failed with exit code {:?}", printable, status.code())
     }
 }
 
@@ -136,16 +125,12 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Language {
             command: LanguageCommand::Set { name },
         } => handle_language_set(&ctx, name),
-        Command::Setup {
-            command,
-            skip_installed,
-            no_deps,
-        } => handle_setup(&ctx, command, skip_installed, no_deps),
-        Command::Review {
-            output,
-            include_working,
-            main,
-        } => handle_review(&ctx, output, include_working, main),
+        Command::Setup { command, skip_installed, no_deps } => {
+            handle_setup(&ctx, command, skip_installed, no_deps)
+        }
+        Command::Review { output, include_working, main } => {
+            handle_review(&ctx, output, include_working, main)
+        }
         Command::Walk {
             directory,
             output,
@@ -192,7 +177,6 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Docker { command } => handle_docker(state, command),
         Command::Kube { command } => handle_kube(state, command),
         Command::Vault { command } => handle_vault(state, command),
-        Command::Os { command } => handle_os(state, command),
         Command::Config { .. } => unreachable!("config commands handled earlier"),
         Command::Setup { .. } => unreachable!("setup commands handled earlier"),
         Command::Review { .. } => unreachable!("review commands handled earlier"),
@@ -440,7 +424,7 @@ fn handle_start(state: &AppState, args: StartArgs) -> Result<()> {
         "--host".to_owned(),
     ];
 
-    let port = args.port.or(if args.prod { Some(8091) } else { None });
+    let port = args.port.or_else(|| if args.prod { Some(8091) } else { None });
     if let Some(port) = port {
         argv.push("--port".to_owned());
         argv.push(port.to_string());
@@ -531,10 +515,7 @@ fn handle_install(state: &AppState, args: InstallArgs) -> Result<()> {
         println!("Installing scaffolds for `{}`...", language);
         scaffold::install(&language)?;
     } else {
-        println!(
-            "Skipping scaffolds for `{}` (project already initialized)",
-            language
-        );
+        println!("Skipping scaffolds for `{}` (project already initialized)", language);
     }
 
     match install_commands(&state.config, &language) {
@@ -590,115 +571,14 @@ fn handle_env(state: &AppState, args: EnvArgs) -> Result<()> {
 fn handle_vault(state: &AppState, command: VaultCommand) -> Result<()> {
     match command {
         VaultCommand::List { account } => vault::list_items(&account, state.ctx.dry_run),
-        VaultCommand::Get {
-            item,
-            field,
-            account,
-        } => vault::get_item(&account, &item, field.as_deref(), state.ctx.dry_run),
-        VaultCommand::Set {
-            item,
-            value,
-            account,
-        } => vault::set_item(&account, &item, &value, state.ctx.dry_run),
+        VaultCommand::Get { item, field, account } => {
+            vault::get_item(&account, &item, field.as_deref(), state.ctx.dry_run)
+        }
+        VaultCommand::Set { item, value, account } => {
+            vault::set_item(&account, &item, &value, state.ctx.dry_run)
+        }
         VaultCommand::Delete { item, account } => {
             vault::delete_item(&account, &item, state.ctx.dry_run)
-        }
-    }
-}
-
-fn handle_os(state: &AppState, command: OsCommand) -> Result<()> {
-    let dev_dir = Path::new(".dev");
-    let config_path = dev_dir.join("config.toml");
-
-    match command {
-        OsCommand::Windows => {
-            let template = dev_dir.join("config.windows.toml");
-            if !template.exists() {
-                bail!(
-                    "Windows config template not found at {}. \
-                     Create .dev/config.windows.toml first.",
-                    template.display()
-                );
-            }
-            if state.ctx.dry_run {
-                println!(
-                    "(dry-run) would copy {} -> {}",
-                    template.display(),
-                    config_path.display()
-                );
-                return Ok(());
-            }
-            fs::copy(&template, &config_path).with_context(|| {
-                format!(
-                    "failed to copy {} to {}",
-                    template.display(),
-                    config_path.display()
-                )
-            })?;
-            println!("Switched to Windows configuration.");
-            println!("  {} -> {}", template.display(), config_path.display());
-            Ok(())
-        }
-        OsCommand::Linux => {
-            let template = dev_dir.join("config.linux.toml");
-            if !template.exists() {
-                bail!(
-                    "Linux config template not found at {}. \
-                     Create .dev/config.linux.toml first.",
-                    template.display()
-                );
-            }
-            if state.ctx.dry_run {
-                println!(
-                    "(dry-run) would copy {} -> {}",
-                    template.display(),
-                    config_path.display()
-                );
-                return Ok(());
-            }
-            fs::copy(&template, &config_path).with_context(|| {
-                format!(
-                    "failed to copy {} to {}",
-                    template.display(),
-                    config_path.display()
-                )
-            })?;
-            println!("Switched to Linux/macOS configuration.");
-            println!("  {} -> {}", template.display(), config_path.display());
-            Ok(())
-        }
-        OsCommand::Show => {
-            if !config_path.exists() {
-                println!("No .dev/config.toml found.");
-                return Ok(());
-            }
-            let content = fs::read_to_string(&config_path)?;
-            // Look for OS-specific patterns
-            let is_windows = content.contains("npx.cmd") || content.contains(".cmd\"");
-            let is_linux = content.contains("\"npx\"") && !content.contains("npx.cmd");
-
-            println!("Current OS configuration: {}", config_path.display());
-            if is_windows {
-                println!("  Detected: Windows (uses npx.cmd / .cmd extensions)");
-            } else if is_linux {
-                println!("  Detected: Linux/macOS (uses npx, no .cmd extensions)");
-            } else {
-                println!("  Detected: Unknown (no recognizable OS pattern)");
-            }
-
-            // Show available templates
-            let windows_exists = dev_dir.join("config.windows.toml").exists();
-            let linux_exists = dev_dir.join("config.linux.toml").exists();
-            println!("\nAvailable templates:");
-            println!(
-                "  config.windows.toml: {}",
-                if windows_exists { "found" } else { "not found" }
-            );
-            println!(
-                "  config.linux.toml: {}",
-                if linux_exists { "found" } else { "not found" }
-            );
-            Ok(())
         }
     }
 }
@@ -817,10 +697,7 @@ fn env_switch(state: &AppState, profile: &str) -> Result<()> {
     fs::copy(profile_path.as_std_path(), env_path.as_std_path())
         .with_context(|| format!("copying {} to {}", profile_path, env_path))?;
 
-    println!(
-        "Switched to profile `{}` (copied {} to {})",
-        profile, profile_path, env_path
-    );
+    println!("Switched to profile `{}` (copied {} to {})", profile, profile_path, env_path);
     Ok(())
 }
 
@@ -838,10 +715,7 @@ fn env_save(state: &AppState, name: &str) -> Result<()> {
     fs::copy(env_path.as_std_path(), profile_path.as_std_path())
         .with_context(|| format!("copying {} to {}", env_path, profile_path))?;
 
-    println!(
-        "Saved current .env as profile `{}` at {}",
-        name, profile_path
-    );
+    println!("Saved current .env as profile `{}` at {}", name, profile_path);
     Ok(())
 }
 
@@ -862,11 +736,7 @@ fn env_check(state: &AppState) -> Result<()> {
             if !entries.contains(key.as_str()) {
                 missing_required.push(key);
             } else {
-                let value = env
-                    .entries()
-                    .find(|(k, _)| k == key)
-                    .map(|(_, v)| v)
-                    .unwrap_or("");
+                let value = env.entries().find(|(k, _)| k == key).map(|(_, v)| v).unwrap_or("");
                 if value.is_empty() {
                     empty_required.push(key);
                 }
@@ -981,8 +851,7 @@ fn env_diff(state: &AppState, reference: &str) -> Result<()> {
     }
 
     let ref_env = envfile::EnvFile::load(&ref_path)?;
-    let ref_keys: std::collections::HashSet<_> =
-        ref_env.entries().map(|(k, _)| k.to_owned()).collect();
+    let ref_keys: std::collections::HashSet<_> = ref_env.entries().map(|(k, _)| k.to_owned()).collect();
 
     let missing: Vec<_> = ref_keys.difference(&env_keys).collect();
     let extra: Vec<_> = env_keys.difference(&ref_keys).collect();
@@ -1026,32 +895,20 @@ fn env_sync(state: &AppState, reference: &str) -> Result<()> {
     }
 
     let ref_env = envfile::EnvFile::load(&ref_path)?;
-    let ref_keys: std::collections::HashSet<_> =
-        ref_env.entries().map(|(k, _)| k.to_owned()).collect();
+    let ref_keys: std::collections::HashSet<_> = ref_env.entries().map(|(k, _)| k.to_owned()).collect();
 
     let missing: Vec<_> = ref_keys.difference(&env_keys).cloned().collect();
 
     if missing.is_empty() {
-        println!(
-            "No missing keys. {} is in sync with {}.",
-            env_path, ref_path
-        );
+        println!("No missing keys. {} is in sync with {}.", env_path, ref_path);
         return Ok(());
     }
 
     println!("Adding {} missing keys from {}:", missing.len(), reference);
     for key in &missing {
-        let value = ref_env
-            .entries()
-            .find(|(k, _)| k == key)
-            .map(|(_, v)| v)
-            .unwrap_or("");
+        let value = ref_env.entries().find(|(k, _)| k == key).map(|(_, v)| v).unwrap_or("");
         env.upsert(key, value);
-        println!(
-            "  + {}={}",
-            key,
-            if value.is_empty() { "(empty)" } else { "*****" }
-        );
+        println!("  + {}={}", key, if value.is_empty() { "(empty)" } else { "*****" });
     }
 
     env.save()?;
@@ -1064,11 +921,7 @@ fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Resul
     let config_path = resolved.path;
     match command {
         Some(ConfigCommand::Path) => {
-            println!(
-                "Config path: {} ({})",
-                config_path,
-                resolved.source.as_str()
-            );
+            println!("Config path: {} ({})", config_path, resolved.source.as_str());
             Ok(())
         }
         None | Some(ConfigCommand::Show) => {
@@ -1079,11 +932,7 @@ fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Resul
             }
 
             let config = config::load_from_path(&config_path)?;
-            println!(
-                "Config path: {} ({})",
-                config_path,
-                resolved.source.as_str()
-            );
+            println!("Config path: {} ({})", config_path, resolved.source.as_str());
             println!("{}", config::format_summary(&config));
             Ok(())
         }
@@ -1114,11 +963,7 @@ fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Resul
                 return Ok(());
             }
             let config = config::load_from_path(&config_path)?;
-            println!(
-                "Reloaded config from {} ({})",
-                config_path,
-                resolved.source.as_str()
-            );
+            println!("Reloaded config from {} ({})", config_path, resolved.source.as_str());
             println!("{}", config::format_summary(&config));
             Ok(())
         }
@@ -1378,10 +1223,7 @@ language = 'typescript'
             std::env::current_dir().unwrap(),
             proj_dir.as_std_path().to_path_buf()
         );
-        assert_eq!(
-            state.effective_language(None).as_deref(),
-            Some("typescript")
-        );
+        assert_eq!(state.effective_language(None).as_deref(), Some("typescript"));
 
         std::env::set_current_dir(old).unwrap();
         let _ = fs::remove_dir_all(root.as_std_path());
@@ -1550,7 +1392,10 @@ fn strip_compose_container_name(path: &Path) -> Result<bool> {
     Ok(true)
 }
 
-fn run_process_streaming_in_dir(argv: &[String], cwd: &Path) -> Result<std::process::ExitStatus> {
+fn run_process_streaming_in_dir(
+    argv: &[String],
+    cwd: &Path,
+) -> Result<std::process::ExitStatus> {
     let mut command = ProcessCommand::new(&argv[0]);
     if argv.len() > 1 {
         command.args(&argv[1..]);
@@ -1639,6 +1484,16 @@ impl CliContext {
     }
 
     fn resolve_config_path(&self) -> Result<ResolvedConfigPath> {
+        /// Return the platform suffix for config file selection.
+        fn platform_config_suffix() -> &'static str {
+            match std::env::consts::OS {
+                "linux" => "linux",
+                "windows" => "windows",
+                "macos" => "macos",
+                _ => "linux",
+            }
+        }
+
         if let Some(path) = &self.file {
             let path = Utf8PathBuf::from_path_buf(path.clone())
                 .map_err(|_| anyhow!("config path must be valid UTF-8"))?;
@@ -1648,39 +1503,66 @@ impl CliContext {
             });
         }
 
-        if let Ok(cwd) = std::env::current_dir()
-            && let Ok(mut dir) = Utf8PathBuf::from_path_buf(cwd)
-        {
-            loop {
-                let preferred = dir.join(".dev").join("config.toml");
-                if preferred.exists() {
-                    return Ok(ResolvedConfigPath {
-                        path: preferred,
-                        source: ConfigPathSource::Discovered,
-                    });
-                }
+        if let Ok(cwd) = std::env::current_dir() {
+            if let Ok(mut dir) = Utf8PathBuf::from_path_buf(cwd) {
+                loop {
+                    let platform_suffix = platform_config_suffix();
 
-                let legacy = dir.join("tools").join("dev").join("config.toml");
-                if legacy.exists() {
-                    return Ok(ResolvedConfigPath {
-                        path: legacy,
-                        source: ConfigPathSource::Discovered,
-                    });
-                }
+                    // .dev/ path — platform-specific first, then generic
+                    let platform_preferred = dir.join(".dev").join(format!("config.{}.toml", platform_suffix));
+                    if platform_preferred.exists() {
+                        return Ok(ResolvedConfigPath {
+                            path: platform_preferred,
+                            source: ConfigPathSource::Discovered,
+                        });
+                    }
 
-                let Some(parent) = dir.parent() else {
-                    break;
-                };
-                dir = parent.to_path_buf();
+                    let preferred = dir.join(".dev").join("config.toml");
+                    if preferred.exists() {
+                        return Ok(ResolvedConfigPath {
+                            path: preferred,
+                            source: ConfigPathSource::Discovered,
+                        });
+                    }
+
+                    // Legacy tools/dev/ path — same priority
+                    let legacy_platform = dir.join("tools").join("dev").join(format!("config.{}.toml", platform_suffix));
+                    if legacy_platform.exists() {
+                        return Ok(ResolvedConfigPath {
+                            path: legacy_platform,
+                            source: ConfigPathSource::Discovered,
+                        });
+                    }
+
+                    let legacy = dir.join("tools").join("dev").join("config.toml");
+                    if legacy.exists() {
+                        return Ok(ResolvedConfigPath {
+                            path: legacy,
+                            source: ConfigPathSource::Discovered,
+                        });
+                    }
+
+                    let Some(parent) = dir.parent() else {
+                        break;
+                    };
+                    dir = parent.to_path_buf();
+                }
             }
         }
 
         let home = dirs::home_dir().ok_or_else(|| anyhow!("unable to determine home directory"))?;
-        let mut path = home;
-        path.push(".dev");
-        path.push("config.toml");
-        let path = Utf8PathBuf::from_path_buf(path)
+        let dev_dir = Utf8PathBuf::from_path_buf(home.join(".dev"))
             .map_err(|_| anyhow!("config path must be valid UTF-8"))?;
+
+        let platform_path = dev_dir.join(format!("config.{}.toml", platform_config_suffix()));
+        if platform_path.exists() {
+            return Ok(ResolvedConfigPath {
+                path: platform_path,
+                source: ConfigPathSource::HomeDefault,
+            });
+        }
+
+        let path = dev_dir.join("config.toml");
         Ok(ResolvedConfigPath {
             path,
             source: ConfigPathSource::HomeDefault,
@@ -1738,9 +1620,10 @@ impl AppState {
         let mut project_language: Option<String> = None;
 
         if let Some(project) = requested_project.as_deref() {
-            let projects = config.projects.as_ref().with_context(|| {
-                format!("project `{}` requested but no projects configured", project)
-            })?;
+            let projects = config
+                .projects
+                .as_ref()
+                .with_context(|| format!("project `{}` requested but no projects configured", project))?;
             let spec = projects
                 .get(project)
                 .with_context(|| format!("unknown project `{}`", project))?;
@@ -1776,11 +1659,8 @@ impl AppState {
     }
 
     fn effective_language(&self, override_lang: Option<String>) -> Option<String> {
-        self.ctx.effective_language(
-            &self.config,
-            self.project_language.as_deref(),
-            override_lang,
-        )
+        self.ctx
+            .effective_language(&self.config, self.project_language.as_deref(), override_lang)
     }
 
     fn env_path(&self) -> Result<Utf8PathBuf> {
@@ -1802,7 +1682,6 @@ fn handle_language_set(ctx: &CliContext, name: String) -> Result<()> {
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn handle_walk(
     ctx: &CliContext,
     directory: PathBuf,
@@ -1816,11 +1695,7 @@ fn handle_walk(
     use crate::walk::{WalkOptions, generate_manifest};
 
     if ctx.dry_run {
-        println!(
-            "[dry-run] Generate manifest for {} -> {}",
-            directory.display(),
-            output.display()
-        );
+        println!("[dry-run] Generate manifest for {} -> {}", directory.display(), output.display());
         return Ok(());
     }
 
@@ -1833,11 +1708,11 @@ fn handle_walk(
 
     println!("Generating directory manifest...");
     let manifest = generate_manifest(&directory, opts)?;
-
+    
     std::fs::write(&output, manifest)?;
-
+    
     println!("Directory map generated successfully: {}", output.display());
-
+    
     Ok(())
 }
 
@@ -1850,8 +1725,7 @@ fn handle_review(
     use crate::review::{ReviewOptions, generate_review, get_repo_root};
 
     if ctx.dry_run {
-        let output_path = output
-            .as_ref()
+        let output_path = output.as_ref()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| "diff.md".to_string());
         println!("[dry-run] Generate review report -> {}", output_path);
@@ -1864,23 +1738,20 @@ fn handle_review(
     };
 
     let repo_root = get_repo_root()?;
-
+    
     println!("Generating code review report...");
     let report = generate_review(opts, &repo_root)?;
-
+    
     let output_path = output.unwrap_or_else(|| PathBuf::from("diff.md"));
-
+    
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-
+    
     std::fs::write(&output_path, report)?;
-
-    println!(
-        "Review report generated successfully: {}",
-        output_path.display()
-    );
-
+    
+    println!("Review report generated successfully: {}", output_path.display());
+    
     Ok(())
 }
 
@@ -1895,7 +1766,7 @@ fn handle_setup(
     // Create log file path
     let home = dirs::home_dir().context("Could not determine home directory")?;
     let log_file = home.join(".dev").join("setup.log");
-
+    
     // Ensure .dev directory exists
     if let Some(parent) = log_file.parent() {
         std::fs::create_dir_all(parent)?;
@@ -1903,7 +1774,7 @@ fn handle_setup(
 
     // Create setup context
     let setup_config = SetupConfig::default();
-    let setup_ctx = SetupContext::new(ctx.dry_run, Some(log_file), setup_config)?;
+    let setup_ctx = SetupContext::new(ctx.dry_run, Some(log_file.into()), setup_config)?;
 
     match command {
         None => {
@@ -1914,11 +1785,10 @@ fn handle_setup(
                 .iter()
                 .map(|name| Component::from_str(name))
                 .collect();
-
+            
             let components = components?;
             // Default to skip_installed=true unless explicitly set to false via root flag
-            let _ = root_skip_installed;
-            let skip = true;
+            let skip = if root_skip_installed { true } else { true };
             crate::setup::run_setup(&setup_ctx, components, skip, root_no_deps)?;
         }
         Some(SetupCommand::Run {
@@ -1930,7 +1800,7 @@ fn handle_setup(
                 .iter()
                 .map(|name| Component::from_str(name))
                 .collect();
-
+            
             let components = components?;
             // Subcommand flags take precedence over root flags
             crate::setup::run_setup(&setup_ctx, components, skip_installed, no_deps)?;
@@ -1942,7 +1812,10 @@ fn handle_setup(
             no_cache,
         }) => {
             let home = dirs::home_dir().context("Could not determine home directory")?;
-            let default_dest = home.join("repos").join("inference").join(service.trim());
+            let default_dest = home
+                .join("repos")
+                .join("inference")
+                .join(service.trim());
             let dest = dest.unwrap_or(default_dest);
 
             let service = service.trim();
@@ -1960,17 +1833,14 @@ fn handle_setup(
                 if no_cache {
                     argv.push("--no-cache".to_owned());
                 }
-                println!(
-                    "[dry-run] run: {} (cwd: {})",
-                    format_command(&argv),
-                    dest.display()
-                );
+                println!("[dry-run] run: {} (cwd: {})", format_command(&argv), dest.display());
                 return Ok(());
             }
 
             if let Some(parent) = dest.parent() {
-                std::fs::create_dir_all(parent)
-                    .with_context(|| format!("creating parent directory {}", parent.display()))?;
+                std::fs::create_dir_all(parent).with_context(|| {
+                    format!("creating parent directory {}", parent.display())
+                })?;
             }
 
             if dest.exists() {
@@ -1997,8 +1867,9 @@ fn handle_setup(
                         "[warn] removing existing destination {} (--force)",
                         dest.display()
                     );
-                    std::fs::remove_dir_all(&dest)
-                        .with_context(|| format!("removing {}", dest.display()))?;
+                    std::fs::remove_dir_all(&dest).with_context(|| {
+                        format!("removing {}", dest.display())
+                    })?;
 
                     let argv = vec![
                         "git".to_owned(),
