@@ -325,6 +325,9 @@ pub enum LanguageCommand {
 pub struct InstallArgs {
     #[arg()]
     pub language: Option<String>,
+    /// Overwrite existing scaffold files instead of skipping them.
+    #[arg(long = "force", default_value_t = false)]
+    pub force: bool,
 }
 
 #[derive(Args, Debug)]

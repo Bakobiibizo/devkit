@@ -46,18 +46,6 @@ fn config_root_dir(config_path: &Utf8PathBuf) -> PathBuf {
     parent.to_path_buf()
 }
 
-fn should_scaffold_in_cwd(language: &str) -> bool {
-    // `dev install` is used both for bootstrapping a brand new project and for provisioning
-    // dependencies in an existing one. When we detect common manifests in the current
-    // directory, we skip template scaffolding to avoid overwriting/adding unrelated files.
-    match language {
-        "typescript" | "ts" => !Path::new("package.json").exists(),
-        "python" => !Path::new("pyproject.toml").exists(),
-        "rust" => !Path::new("Cargo.toml").exists(),
-        _ => true,
-    }
-}
-
 fn handle_kube(state: &AppState, command: KubeCommand) -> Result<()> {
     match command {
         KubeCommand::Help => {
@@ -723,12 +711,8 @@ fn handle_install(state: &AppState, args: InstallArgs) -> Result<()> {
         return Ok(());
     }
 
-    if should_scaffold_in_cwd(&language) {
-        println!("Installing scaffolds for `{}`...", language);
-        scaffold::install(&language)?;
-    } else {
-        println!("Skipping scaffolds for `{}` (project already initialized)", language);
-    }
+    println!("Installing scaffolds for `{}`...", language);
+    scaffold::install(&language, args.force)?;
 
     match install_commands(&state.config, &language) {
         Some(commands) if !commands.is_empty() => {

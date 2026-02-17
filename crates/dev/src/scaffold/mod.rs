@@ -6,11 +6,11 @@ use crate::templates;
 use anyhow::{Result, bail};
 use camino::Utf8Path;
 
-pub fn install(language: &str) -> Result<()> {
+pub fn install(language: &str, force: bool) -> Result<()> {
     match language {
-        "rust" => rust::install(),
-        "python" => python::install(),
-        "typescript" | "ts" => typescript::install(),
+        "rust" => rust::install(force),
+        "python" => python::install(force),
+        "typescript" | "ts" => typescript::install(force),
         other => bail!("unsupported language scaffold: {other}"),
     }
 }

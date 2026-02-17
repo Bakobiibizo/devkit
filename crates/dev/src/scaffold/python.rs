@@ -12,24 +12,29 @@ const PRECOMMIT: &str = ".pre-commit-config.yaml";
 const CI_WORKFLOW: &str = ".github/workflows/ci.yml";
 const GITIGNORE: &str = ".gitignore";
 
-pub fn install() -> Result<()> {
+pub fn install(force: bool) -> Result<()> {
     ensure_uv()?; // installs uv if necessary
     ensure_uv_tool("ruff")?;
     ensure_uv_tool("mypy")?;
-    ensure_file(GITIGNORE, "python/.gitignore")?;
-    ensure_file(RUFF, "python/ruff.toml")?;
-    ensure_file(MYPY, "python/mypy.ini")?;
-    ensure_file(PRECOMMIT, "python/pre-commit-config.yaml")?;
-    ensure_ci_workflow()?;
+    ensure_file(GITIGNORE, "python/.gitignore", force)?;
+    ensure_file(RUFF, "python/ruff.toml", force)?;
+    ensure_file(MYPY, "python/mypy.ini", force)?;
+    ensure_file(PRECOMMIT, "python/pre-commit-config.yaml", force)?;
+    ensure_ci_workflow(force)?;
 
     println!("Python scaffolding complete");
     Ok(())
 }
 
-
-fn ensure_file(target: &str, template: &str) -> Result<()> {
+fn ensure_file(target: &str, template: &str, force: bool) -> Result<()> {
     let destination = Utf8Path::new(target);
     if destination.exists() {
+        if force {
+            write_template(destination, template)?;
+            println!("  overwritten {}", destination);
+        } else {
+            println!("  skipped {}", destination);
+        }
         return Ok(());
     }
 
@@ -38,9 +43,15 @@ fn ensure_file(target: &str, template: &str) -> Result<()> {
     Ok(())
 }
 
-fn ensure_ci_workflow() -> Result<()> {
+fn ensure_ci_workflow(force: bool) -> Result<()> {
     let destination = Utf8Path::new(CI_WORKFLOW);
     if destination.exists() {
+        if force {
+            write_template(destination, "python/.github/workflows/ci.yml")?;
+            println!("  overwritten {}", destination);
+        } else {
+            println!("  skipped {}", destination);
+        }
         return Ok(());
     }
 
@@ -101,5 +112,3 @@ fn ensure_uv_tool(tool: &str) -> Result<()> {
     }
     Ok(())
 }
-
-
