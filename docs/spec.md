@@ -10,6 +10,7 @@
 * Language management: `dev language <name>`, `dev install [<language>]` for scaffold + tool install.
 * Env management: `dev env`, `dev env add`, `dev env rm`.
 * Config management: `dev config`, `dev config check`, `dev config generate`.
+* Research project scaffolding: `dev research init`.
 
 ## CLI surface
 
@@ -63,6 +64,10 @@ Commands:
   docker develop [--service <NAME>] [--no-up]
                                     Start compose service and open an interactive shell
   docker dev ...                    Alias for `docker develop`
+
+  research init [DIR] [--name <NAME>] [--package <PKG>] [--force] [--skip-install]
+                                    Scaffold an isolated, project-local research workspace
+                                    and set HARNESS_HOME=.harness
 
   config                           Display config
   config check                     Validate config and display its path

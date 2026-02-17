@@ -145,6 +145,11 @@ pub enum Command {
         #[command(subcommand)]
         command: DockerCommand,
     },
+    /// Research workflow management (isolated harness projects).
+    Research {
+        #[command(subcommand)]
+        command: ResearchCommand,
+    },
     /// Kubernetes helpers (contexts, namespaces, quick info)
     Kube {
         #[command(subcommand)]
@@ -162,6 +167,42 @@ pub enum Command {
     },
     #[command(external_subcommand)]
     External(Vec<String>),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ResearchCommand {
+    /// Scaffold an isolated, project-local research workspace.
+    Init(ResearchInitArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct ResearchInitArgs {
+    /// Target directory for the research project (default: current directory).
+    #[arg(default_value = ".")]
+    pub directory: PathBuf,
+
+    /// Project name written into project.yaml (default: directory name).
+    #[arg(long = "name")]
+    pub name: Option<String>,
+
+    /// Python package name for reusable bindings/logic.
+    #[arg(long = "package")]
+    pub package: Option<String>,
+
+    /// Overwrite scaffold files if they already exist.
+    #[arg(long = "force", default_value_t = false)]
+    pub force: bool,
+
+    /// Skip automatic harness dependency install with uv.
+    #[arg(long = "skip-install", default_value_t = false)]
+    pub skip_install: bool,
+
+    /// Git URL used to install research-harness.
+    #[arg(
+        long = "harness-git",
+        default_value = "https://github.com/hydra-dynamix/research-harness-2.git"
+    )]
+    pub harness_git: String,
 }
 
 #[derive(Subcommand, Debug)]
