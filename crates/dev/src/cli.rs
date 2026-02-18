@@ -173,6 +173,12 @@ pub enum Command {
 pub enum ResearchCommand {
     /// Scaffold an isolated, project-local research workspace.
     Init(ResearchInitArgs),
+    /// Start the research dashboard API server.
+    Start(ResearchDashboardArgs),
+    /// Stop the research dashboard API server.
+    Stop,
+    /// Restart the research dashboard API server.
+    Restart(ResearchDashboardArgs),
 }
 
 #[derive(Args, Debug)]
@@ -203,6 +209,17 @@ pub struct ResearchInitArgs {
         default_value = "https://github.com/hydra-dynamix/research-harness-2.git"
     )]
     pub harness_git: String,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ResearchDashboardArgs {
+    /// Host interface for the dashboard server.
+    #[arg(long = "host", default_value = "0.0.0.0")]
+    pub host: String,
+
+    /// TCP port for the dashboard server.
+    #[arg(long = "port", default_value_t = 8022)]
+    pub port: u16,
 }
 
 #[derive(Subcommand, Debug)]

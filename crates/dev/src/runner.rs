@@ -13,7 +13,8 @@ use crate::cli::{
     Cli, Command, ConfigCommand, DockerBuildArgs, DockerCommand, DockerComposeCommand,
     DockerComposeUpCommand, DockerComposeUpBuildArgs, DockerInitArgs, EnvArgs, EnvCommand,
     GitCommand, InstallArgs, KubeCommand, LanguageCommand, OsCommand, ResearchCommand,
-    ResearchInitArgs, SetupCommand, StartArgs, VaultCommand, Verb, VersionCommand,
+    ResearchDashboardArgs, ResearchInitArgs, SetupCommand, StartArgs, VaultCommand, Verb,
+    VersionCommand,
 };
 use crate::config::{DevConfig, TaskUpdateMode};
 use crate::envfile;
@@ -180,7 +181,162 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
 fn handle_research(state: &AppState, command: ResearchCommand) -> Result<()> {
     match command {
         ResearchCommand::Init(args) => research_init(state, args),
+        ResearchCommand::Start(args) => research_dashboard_start(state, args),
+        ResearchCommand::Stop => research_dashboard_stop(state),
+        ResearchCommand::Restart(args) => research_dashboard_restart(state, args),
     }
+}
+
+fn research_dashboard_start(state: &AppState, args: ResearchDashboardArgs) -> Result<()> {
+    let (cwd, harness_home, pid_path, log_path) = research_dashboard_paths()?;
+
+    if let Some(pid) = read_dashboard_pid(&pid_path)? {
+        if process_is_running(pid) {
+            println!(
+                "Research dashboard already running (pid={}, host={}, port={}).",
+                pid, args.host, args.port
+            );
+            println!("Log: {}", log_path.display());
+            return Ok(());
+        }
+    }
+
+    fs::create_dir_all(&harness_home)
+        .with_context(|| format!("creating {}", harness_home.display()))?;
+
+    println!("Starting research dashboard on {}:{}...", args.host, args.port);
+    if state.ctx.dry_run {
+        println!(
+            "[dry-run] run: HARNESS_HOME={} uv run uvicorn research_harness.api.main:app --host {} --port {} > {} 2>&1",
+            harness_home.display(),
+            args.host,
+            args.port,
+            log_path.display()
+        );
+        return Ok(());
+    }
+
+    let log_out = fs::File::create(&log_path)
+        .with_context(|| format!("creating {}", log_path.display()))?;
+    let log_err = log_out
+        .try_clone()
+        .with_context(|| format!("cloning {}", log_path.display()))?;
+
+    let child = ProcessCommand::new("setsid")
+        .current_dir(&cwd)
+        .env("HARNESS_HOME", harness_home.as_os_str())
+        .arg("uv")
+        .arg("run")
+        .arg("uvicorn")
+        .arg("research_harness.api.main:app")
+        .arg("--host")
+        .arg(&args.host)
+        .arg("--port")
+        .arg(args.port.to_string())
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(log_out))
+        .stderr(Stdio::from(log_err))
+        .spawn()
+        .context("starting research dashboard process")?;
+
+    let pid = child.id();
+    fs::write(&pid_path, format!("{}\n", pid))
+        .with_context(|| format!("writing {}", pid_path.display()))?;
+
+    std::thread::sleep(std::time::Duration::from_millis(350));
+    if !process_is_running(pid) {
+        let _ = fs::remove_file(&pid_path);
+        bail!(
+            "research dashboard failed to stay running; check {}",
+            log_path.display()
+        );
+    }
+
+    println!("Research dashboard started (pid={}).", pid);
+    println!("Log: {}", log_path.display());
+    Ok(())
+}
+
+fn research_dashboard_stop(state: &AppState) -> Result<()> {
+    let (_, _, pid_path, _) = research_dashboard_paths()?;
+
+    let Some(pid) = read_dashboard_pid(&pid_path)? else {
+        println!("Research dashboard is not running (no pid file).");
+        return Ok(());
+    };
+
+    if !process_is_running(pid) {
+        if !state.ctx.dry_run {
+            let _ = fs::remove_file(&pid_path);
+        }
+        println!("Research dashboard process {} not running; cleaned stale pid file.", pid);
+        return Ok(());
+    }
+
+    println!("Stopping research dashboard (pid={})...", pid);
+    if state.ctx.dry_run {
+        println!("[dry-run] run: kill -TERM -{}", pid);
+        return Ok(());
+    }
+
+    let status = ProcessCommand::new("kill")
+        .arg("-TERM")
+        .arg(format!("-{}", pid))
+        .status()
+        .with_context(|| format!("stopping process group {}", pid))?;
+    if !status.success() {
+        let fallback = ProcessCommand::new("kill")
+            .arg("-TERM")
+            .arg(pid.to_string())
+            .status()
+            .with_context(|| format!("stopping pid {}", pid))?;
+        if !fallback.success() {
+            bail!("failed to stop research dashboard (pid={})", pid);
+        }
+    }
+
+    std::thread::sleep(std::time::Duration::from_millis(250));
+    let _ = fs::remove_file(&pid_path);
+    println!("Research dashboard stopped.");
+    Ok(())
+}
+
+fn research_dashboard_restart(state: &AppState, args: ResearchDashboardArgs) -> Result<()> {
+    research_dashboard_stop(state)?;
+    research_dashboard_start(state, args)
+}
+
+fn research_dashboard_paths() -> Result<(PathBuf, PathBuf, PathBuf, PathBuf)> {
+    let cwd = std::env::current_dir().context("resolving current working directory")?;
+    let harness_home = cwd.join(".harness");
+    let pid_path = harness_home.join("dashboard.pid");
+    let log_path = harness_home.join("dashboard.log");
+    Ok((cwd, harness_home, pid_path, log_path))
+}
+
+fn read_dashboard_pid(pid_path: &Path) -> Result<Option<u32>> {
+    if !pid_path.exists() {
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(pid_path)
+        .with_context(|| format!("reading {}", pid_path.display()))?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    let pid = trimmed
+        .parse::<u32>()
+        .with_context(|| format!("invalid pid in {}", pid_path.display()))?;
+    Ok(Some(pid))
+}
+
+fn process_is_running(pid: u32) -> bool {
+    ProcessCommand::new("kill")
+        .arg("-0")
+        .arg(pid.to_string())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 fn research_init(state: &AppState, args: ResearchInitArgs) -> Result<()> {
