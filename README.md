@@ -1,6 +1,6 @@
 # devkit
 
-A unified developer workflow toolkit for Rust, Python, and TypeScript projects.
+A unified developer workflow toolkit for Rust, Python, TypeScript, and Elixir projects.
 
 ## Components
 
@@ -81,7 +81,7 @@ dev config generate [PATH] --force
 ### Language tooling
 
 ```bash
-dev install [rust|python|typescript]
+dev install [rust|python|typescript|elixir]
 dev language set <name>
 ```
 

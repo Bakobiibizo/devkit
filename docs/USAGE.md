@@ -88,7 +88,7 @@ Global flags:
 
 - **How do I overwrite the config?** Use `dev config generate --force`.
 - **How do I run workflows without mutating files?** Add `--dry-run` anywhere on the command line.
-- **How do I install language scaffolds?** Run `dev install` (optionally specify `rust`, `python`, or `typescript`).
+- **How do I install language scaffolds?** Run `dev install` (optionally specify `rust`, `python`, `typescript`, or `elixir`).
 
 ## Further Reading
 
