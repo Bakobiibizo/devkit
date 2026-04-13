@@ -184,6 +184,46 @@ commands = [
   "ts_hygiene"
 ]
 
+# ===================== Elixir ========================
+
+[tasks.elixir_deps]
+commands = [["mix", "deps.get"]]
+
+[tasks.elixir_fmt]
+commands = [["mix", "format"]]
+
+[tasks.elixir_fmt_check]
+commands = [["mix", "format", "--check-formatted"]]
+
+[tasks.elixir_lint]
+# fail on compiler warnings
+commands = [["mix", "compile", "--warnings-as-errors"]]
+
+[tasks.elixir_type]
+# default "type" gate without requiring Dialyzer
+commands = [["mix", "compile", "--warnings-as-errors"]]
+
+[tasks.elixir_test]
+commands = [["mix", "test"]]
+
+[tasks.elixir_fix]
+commands = [
+  "elixir_fmt"
+]
+
+[tasks.elixir_check]
+commands = [
+  "elixir_fmt_check",
+  "elixir_lint",
+  "elixir_test"
+]
+
+[tasks.elixir_ci]
+commands = [
+  "elixir_deps",
+  "elixir_check"
+]
+
 # ===================== Language installs ========================
 
 [languages.rust]
@@ -227,31 +267,43 @@ fix   = ["ts_fix"]
 check = ["ts_check"]
 ci    = ["ts_ci"]
 
+[languages.elixir]
+install = [["mix", "deps.get"]]
+
+[languages.elixir.pipelines]
+fmt   = ["elixir_fmt"]
+lint  = ["elixir_lint"]
+type  = ["elixir_type"]
+test  = ["elixir_test"]
+fix   = ["elixir_fix"]
+check = ["elixir_check"]
+ci    = ["elixir_ci"]
+
 # ===================== Monorepo "all" aggregations ========================
-# These run language tasks in a stable order: Rust, Python, TS.
+# These run language tasks in a stable order: Rust, Python, TS, Elixir.
 
 [tasks.all_fmt]
-commands = ["rust_fmt", "py_fmt", "ts_fmt"]
+commands = ["rust_fmt", "py_fmt", "ts_fmt", "elixir_fmt"]
 
 [tasks.all_lint]
-commands = ["rust_lint_check", "py_lint", "ts_lint"]
+commands = ["rust_lint_check", "py_lint", "ts_lint", "elixir_lint"]
 
 [tasks.all_type]
-commands = ["rust_type", "py_type", "ts_type"]
+commands = ["rust_type", "py_type", "ts_type", "elixir_type"]
 
 [tasks.all_test]
-commands = ["rust_test", "py_test", "ts_test"]
+commands = ["rust_test", "py_test", "ts_test", "elixir_test"]
 
 [tasks.all_fix]
-commands = ["rust_fix", "py_fix", "ts_fix"]
+commands = ["rust_fix", "py_fix", "ts_fix", "elixir_fix"]
 
 [tasks.all_check]
 # No file writes. Equivalent to running each language's precommit gate.
-commands = ["rust_check", "py_check", "ts_check"]
+commands = ["rust_check", "py_check", "ts_check", "elixir_check"]
 
 [tasks.all_ci]
 # Heavier CI gate that includes extras like audit/deny/udeps and hygiene.
-commands = ["rust_ci", "py_ci", "ts_ci"]
+commands = ["rust_ci", "py_ci", "ts_ci", "elixir_ci"]
 
 # ===================== ngrok ========================
 # Starts ngrok with GitHub OAuth credentials loaded from 1Password.

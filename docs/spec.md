@@ -95,7 +95,7 @@ Commands:
 
 ## Config format (minimal recap)
 
-* `default_language = "rust" | "python" | "typescript"`
+* `default_language = "rust" | "python" | "typescript" | "elixir"`
 * `[tasks.<name>]` with `commands = [[...], ...]` or `["task_ref", ...]`
 * `[languages.<name>.pipelines] fmt|lint|type|test|fix|check|ci = ["task_a", "task_b"]`
 * Monorepo: `[tasks.all_fmt]`, `[tasks.all_check]`, etc.
