@@ -25,28 +25,6 @@ pub struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
-pub enum KubeCommand {
-    /// Show kube helper usage and examples.
-    Help,
-    /// List kubeconfig contexts with the current one marked.
-    Contexts,
-    /// Switch to a kubeconfig context.
-    Use {
-        /// Context name (as shown in `kube contexts`).
-        context: String,
-    },
-    /// Show the current kubeconfig context.
-    Current,
-    /// List namespaces in the current context.
-    Namespaces,
-    /// Set the default namespace on the current context.
-    SetNamespace {
-        /// Namespace to set as default for the current context.
-        namespace: String,
-    },
-}
-
-#[derive(Subcommand, Debug)]
 pub enum Command {
     /// List available tasks and pipelines.
     List,
@@ -145,22 +123,18 @@ pub enum Command {
         #[command(subcommand)]
         command: DockerCommand,
     },
-    /// Research workflow management (isolated harness projects).
+    /// Internal research project scaffolding.
+    #[command(hide = true)]
     Research {
         #[command(subcommand)]
         command: ResearchCommand,
-    },
-    /// Kubernetes helpers (contexts, namespaces, quick info)
-    Kube {
-        #[command(subcommand)]
-        command: KubeCommand,
     },
     /// 1Password vault operations for managing secrets.
     Vault {
         #[command(subcommand)]
         command: VaultCommand,
     },
-    /// Switch devkit config between OS platforms (Windows/Linux/macOS).
+    /// Write platform-specific config overrides for the target host OS.
     Os {
         #[command(subcommand)]
         command: OsCommand,
@@ -207,11 +181,11 @@ pub struct ResearchInitArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum OsCommand {
-    /// Switch to Windows configuration (uses npx.cmd, .cmd extensions).
+    /// Write Windows-oriented config overrides (uses npx.cmd, .cmd extensions).
     Windows,
-    /// Switch to Linux/macOS configuration (uses npx, no extensions).
+    /// Write Linux/macOS-oriented config overrides (uses npx, no extensions).
     Linux,
-    /// Show current OS configuration.
+    /// Show the detected host OS and the active override target.
     Show,
 }
 

@@ -15,7 +15,6 @@ A single-binary Rust CLI for unified developer workflows:
 - `.env` helpers (`dev env ...`)
 - System setup (`dev setup ...`)
 - Dockerized GPU dev containers (`dev docker ...`)
-- Isolated research project scaffolding (`dev research init`)
 - Review overlays and directory manifests (`dev review`, `dev walk`)
 
 ### `devkey` (Windows only)
@@ -104,18 +103,6 @@ dev env template
 dev env diff [REF]
 dev env sync [REF]
 ```
-
-### Research management
-
-```bash
-# Scaffold an isolated, project-local research workspace
-dev research init [DIR] --name <project-name> --package <python_package>
-
-# Preview without writing files
-dev --dry-run research init ./research/heu-exp-01
-```
-
-`dev research init` creates a clean-room research layout (`project.yaml`, `experiments/`, `src/<package>/bindings/`, `reports/templates/`, `.harness/`) and sets `HARNESS_HOME=.harness` so runs remain project-local and commit-friendly.
 
 ## Docker workflow (GPU dev container)
 

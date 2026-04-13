@@ -53,17 +53,6 @@ Global flags:
 
 - `dev install [language]` – scaffold language-specific config files and run optional provisioning commands defined in config. Supports `--dry-run` to preview actions.
 
-### Research Scaffolding
-
-- `dev research init [directory] [--name <name>] [--package <pkg>] [--force] [--skip-install]`
-  - Creates an isolated, project-local research scaffold with:
-    - `project.yaml`
-    - `configs/`, `experiments/`, `src/<package>/bindings/`
-    - `reports/templates/`
-    - `.harness/runs` and `.harness/datasets`
-    - `.env` with `HARNESS_HOME=.harness`
-  - Installs harness dependency via `uv add "research-harness @ git+<url>"` unless `--skip-install` is passed.
-
 ## Git Automation
 
 - `dev git branch-create <name> [--from <base>] [--push] [--allow-dirty]`

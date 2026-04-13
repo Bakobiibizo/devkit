@@ -12,8 +12,8 @@ use clap::Parser;
 use crate::cli::{
     Cli, Command, ConfigCommand, DockerBuildArgs, DockerCommand, DockerComposeCommand,
     DockerComposeUpCommand, DockerComposeUpBuildArgs, DockerInitArgs, EnvArgs, EnvCommand,
-    GitCommand, InstallArgs, KubeCommand, LanguageCommand, OsCommand, ResearchCommand,
-    ResearchInitArgs, SetupCommand, StartArgs, VaultCommand, Verb, VersionCommand,
+    GitCommand, InstallArgs, LanguageCommand, OsCommand, ResearchCommand, ResearchInitArgs,
+    SetupCommand, StartArgs, VaultCommand, Verb, VersionCommand,
 };
 use crate::config::{DevConfig, TaskUpdateMode};
 use crate::envfile;
@@ -44,44 +44,6 @@ fn config_root_dir(config_path: &Utf8PathBuf) -> PathBuf {
     }
 
     parent.to_path_buf()
-}
-
-fn handle_kube(state: &AppState, command: KubeCommand) -> Result<()> {
-    match command {
-        KubeCommand::Help => {
-            println!(
-                "\nKubernetes helper commands:\n  dev kube help                      Show this help\n  dev kube contexts                  List kubeconfig contexts (marks current with *)\n  dev kube use <context>             Switch to a kube context\n  dev kube current                   Show current kube context\n  dev kube namespaces                List namespaces in current context\n  dev kube set-namespace <ns>        Set default namespace on current context\n\nExamples:\n  dev kube contexts\n  dev kube use dev-cluster\n  dev kube set-namespace inference\n  dev kube namespaces\n"
-            );
-            Ok(())
-        }
-        KubeCommand::Contexts => kube_cmd(&["kubectl", "config", "get-contexts"], state),
-        KubeCommand::Use { context } => {
-            kube_cmd(&["kubectl", "config", "use-context", context.as_str()], state)
-        }
-        KubeCommand::Current => kube_cmd(&["kubectl", "config", "current-context"], state),
-        KubeCommand::Namespaces => kube_cmd(&["kubectl", "get", "namespaces"], state),
-        KubeCommand::SetNamespace { namespace } => kube_cmd(
-            &["kubectl", "config", "set-context", "--current", "--namespace", namespace.as_str()],
-            state,
-        ),
-    }
-}
-
-fn kube_cmd(argv: &[&str], state: &AppState) -> Result<()> {
-    let printable = argv.join(" ");
-    println!("{}", printable);
-    if state.ctx.dry_run {
-        println!("    (dry-run) skipped");
-        return Ok(());
-    }
-
-    let argv_owned: Vec<String> = argv.iter().map(|s| (*s).to_owned()).collect();
-    let status = run_process(&argv_owned)?;
-    if status.success() {
-        Ok(())
-    } else {
-        bail!("command `{}` failed with exit code {:?}", printable, status.code())
-    }
 }
 
 impl ConfigPathSource {
@@ -164,7 +126,6 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Env(args) => handle_env(state, args),
         Command::Docker { command } => handle_docker(state, command),
         Command::Research { command } => handle_research(state, command),
-        Command::Kube { command } => handle_kube(state, command),
         Command::Vault { command } => handle_vault(state, command),
         Command::Os { command } => handle_os(state, command),
         Command::Config { .. } => unreachable!("config commands handled earlier"),
