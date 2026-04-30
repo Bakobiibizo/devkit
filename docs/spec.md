@@ -134,21 +134,20 @@ Use `toml_edit` so comments survive round-trip edits.
 * Ensure `rustup`, install components if missing:
 
   * `rustup component add rustfmt clippy`
-* Optional tools if present in config `languages.rust.install`: `cargo-audit`, `cargo-deny`, `cargo-udeps` (use `+nightly` for udeps if needed).
+* Optional stricter tools can be added by projects that want them: `cargo-audit`, `cargo-deny`, `cargo-udeps` (use `+nightly` for udeps if needed).
 * Drop sample files if absent:
 
   * `.cargo/config.toml` (incremental, target dir hints)
-  * `deny.toml` (license/banlist template)
 
 ### `dev install python`
 
 * Ensure `uv`, run `uv sync` if `pyproject.toml` exists.
-* Create `ruff.toml`, `mypy.ini`, `.pre-commit-config.yaml` with sane defaults if missing.
+* Prefer `pyproject.toml` for tool configuration. New projects get starter Ruff and Mypy sections there; existing projects with `pyproject.toml` are left alone.
 
 ### `dev install typescript`
 
 * Ensure `pnpm` (or fallback to `npm`), run `pnpm install` if `package.json` exists.
-* Create `eslint.config.ts`, `tsconfig.json`, `vitest.config.ts`, `.prettierrc` if missing.
+* New projects get a starter `package.json` with scripts and Prettier configuration, plus `eslint.config.ts`, `tsconfig.json`, and `vitest.config.ts` when missing.
 
 Scaffold templates (safe defaults):
 
@@ -197,26 +196,25 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({ test: { globals: true, environment: "node" } });
 ```
 
-* `ruff.toml`
+* `pyproject.toml` tool sections
 
 ```toml
+[tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
 extend-select = ["I", "UP", "PL", "RUF"]
 ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_unused_ignores = true
+disallow_untyped_defs = false
 ```
 
-* `mypy.ini`
-
-```ini
-[mypy]
-python_version = 3.11
-strict = False
-warn_unused_ignores = True
-disallow_untyped_defs = False
-```
-
-* `deny.toml` (snippet)
+* Optional `deny.toml` for projects that choose license/banlist enforcement:
 
 ```toml
 [licenses]

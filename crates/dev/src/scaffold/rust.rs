@@ -5,14 +5,12 @@ use std::fs;
 use super::write_template;
 
 const CARGO_CONFIG: &str = ".cargo/config.toml";
-const DENY_FILE: &str = "deny.toml";
 const CI_WORKFLOW: &str = ".github/workflows/ci.yml";
 const GITIGNORE: &str = ".gitignore";
 
 pub fn install() -> Result<()> {
     ensure_file(GITIGNORE, "rust/.gitignore")?;
     ensure_file(CARGO_CONFIG, "rust/cargo-config.toml")?;
-    ensure_file(DENY_FILE, "rust/deny.toml")?;
     ensure_ci_workflow()?;
 
     println!("Rust scaffolding complete");

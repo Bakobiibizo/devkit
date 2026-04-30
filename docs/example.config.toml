@@ -45,16 +45,15 @@ commands = [
 ]
 
 [tasks.rust_check]
-# pre-commit style: no file modifications
+# default gate: no file modifications, no project-specific policy enforcement
 commands = [
   "rust_fmt_check",
   "rust_lint_check",
-  "rust_type",
   "rust_test"
 ]
 
 [tasks.rust_ci_extras]
-# Security, license, and dep hygiene. Safe for CI, no file writes.
+# Optional stricter checks. Enable these only when the project wants them.
 commands = [
   ["cargo", "audit"],
   ["cargo", "deny", "check"],
@@ -63,8 +62,7 @@ commands = [
 
 [tasks.rust_ci]
 commands = [
-  "rust_check",
-  "rust_ci_extras"
+  "rust_check"
 ]
 
 # ===================== Python ========================
@@ -101,7 +99,6 @@ commands = [
 commands = [
   "py_fmt_check",
   "py_lint",
-  "py_type",
   "py_test"
 ]
 
@@ -120,9 +117,7 @@ commands = [["uv", "run", "pre-commit", "run", "--all-files"]]
 commands = [
   "py_fmt_check",
   "py_lint",
-  "py_type",
   "py_test"
-  # If you want hooks here, add: "py_precommit_all"
 ]
 
 # ===================== TypeScript ========================
@@ -169,9 +164,7 @@ commands = [
 commands = [
   "ts_fmt_check",
   "ts_lint",
-  "ts_type",
-  "ts_test",
-  "ts_hygiene"
+  "ts_test"
 ]
 
 
@@ -179,19 +172,13 @@ commands = [
 commands = [
   "ts_fmt_check",
   "ts_lint",
-  "ts_type",
-  "ts_test",
-  "ts_hygiene"
+  "ts_test"
 ]
 
 # ===================== Language installs ========================
 
 [languages.rust]
-install = [
-  ["cargo", "install", "cargo-audit"],
-  ["cargo", "install", "cargo-deny", "--version", "0.18.3"],
-  ["cargo", "install", "cargo-udeps", "--version", "0.1.56", "--locked"]
-]
+install = []
 
 # Map the six verbs to tasks
 [languages.rust.pipelines]
@@ -250,7 +237,7 @@ commands = ["rust_fix", "py_fix", "ts_fix"]
 commands = ["rust_check", "py_check", "ts_check"]
 
 [tasks.all_ci]
-# Heavier CI gate that includes extras like audit/deny/udeps and hygiene.
+# Default CI gate: format checks, linters, and tests.
 commands = ["rust_ci", "py_ci", "ts_ci"]
 
 # ===================== Git ========================

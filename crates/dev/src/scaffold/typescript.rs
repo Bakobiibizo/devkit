@@ -4,19 +4,19 @@ use std::fs;
 
 use super::write_template;
 
+const PACKAGE_JSON: &str = "package.json";
 const ESLINT: &str = "eslint.config.ts";
 const TSCONFIG: &str = "tsconfig.json";
 const VITEST: &str = "vitest.config.ts";
-const PRETTIER: &str = ".prettierrc.json";
 const CI_WORKFLOW: &str = ".github/workflows/ci.yml";
 const GITIGNORE: &str = ".gitignore";
 
 pub fn install() -> Result<()> {
     ensure_file(GITIGNORE, "typescript/.gitignore")?;
+    ensure_file(PACKAGE_JSON, "typescript/package.json")?;
     ensure_file(ESLINT, "typescript/eslint.config.ts")?;
     ensure_file(TSCONFIG, "typescript/tsconfig.json")?;
     ensure_file(VITEST, "typescript/vitest.config.ts")?;
-    ensure_file(PRETTIER, "typescript/prettierrc.json")?;
     ensure_ci_workflow()?;
 
     println!("TypeScript scaffolding complete");

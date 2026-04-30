@@ -6,9 +6,7 @@ use std::fs;
 
 use super::write_template;
 
-const RUFF: &str = "ruff.toml";
-const MYPY: &str = "mypy.ini";
-const PRECOMMIT: &str = ".pre-commit-config.yaml";
+const PYPROJECT: &str = "pyproject.toml";
 const CI_WORKFLOW: &str = ".github/workflows/ci.yml";
 const GITIGNORE: &str = ".gitignore";
 
@@ -17,15 +15,12 @@ pub fn install() -> Result<()> {
     ensure_uv_tool("ruff")?;
     ensure_uv_tool("mypy")?;
     ensure_file(GITIGNORE, "python/.gitignore")?;
-    ensure_file(RUFF, "python/ruff.toml")?;
-    ensure_file(MYPY, "python/mypy.ini")?;
-    ensure_file(PRECOMMIT, "python/pre-commit-config.yaml")?;
+    ensure_file(PYPROJECT, "python/pyproject.toml")?;
     ensure_ci_workflow()?;
 
     println!("Python scaffolding complete");
     Ok(())
 }
-
 
 fn ensure_file(target: &str, template: &str) -> Result<()> {
     let destination = Utf8Path::new(target);
@@ -60,7 +55,7 @@ fn ensure_uv() -> Result<()> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .map_or(false, |status| status.success())
+        .is_ok_and(|status| status.success())
     {
         return Ok(());
     }
@@ -101,4 +96,3 @@ fn ensure_uv_tool(tool: &str) -> Result<()> {
     }
     Ok(())
 }
-
