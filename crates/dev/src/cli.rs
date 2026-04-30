@@ -170,8 +170,10 @@ pub enum Command {
 pub enum OsCommand {
     /// Switch to Windows configuration (uses npx.cmd, .cmd extensions).
     Windows,
-    /// Switch to Linux/macOS configuration (uses npx, no extensions).
+    /// Switch to Linux configuration.
     Linux,
+    /// Switch to macOS configuration.
+    Macos,
     /// Show current OS configuration.
     Show,
 }

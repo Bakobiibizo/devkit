@@ -618,96 +618,188 @@ fn handle_os(state: &AppState, command: OsCommand) -> Result<()> {
     let config_path = dev_dir.join("config.toml");
 
     match command {
-        OsCommand::Windows => {
-            let template = dev_dir.join("config.windows.toml");
-            if !template.exists() {
-                bail!(
-                    "Windows config template not found at {}. \
-                     Create .dev/config.windows.toml first.",
-                    template.display()
-                );
-            }
-            if state.ctx.dry_run {
-                println!(
-                    "(dry-run) would copy {} -> {}",
-                    template.display(),
-                    config_path.display()
-                );
-                return Ok(());
-            }
-            fs::copy(&template, &config_path).with_context(|| {
-                format!(
-                    "failed to copy {} to {}",
-                    template.display(),
-                    config_path.display()
-                )
-            })?;
-            println!("Switched to Windows configuration.");
-            println!("  {} -> {}", template.display(), config_path.display());
-            Ok(())
-        }
-        OsCommand::Linux => {
-            let template = dev_dir.join("config.linux.toml");
-            if !template.exists() {
-                bail!(
-                    "Linux config template not found at {}. \
-                     Create .dev/config.linux.toml first.",
-                    template.display()
-                );
-            }
-            if state.ctx.dry_run {
-                println!(
-                    "(dry-run) would copy {} -> {}",
-                    template.display(),
-                    config_path.display()
-                );
-                return Ok(());
-            }
-            fs::copy(&template, &config_path).with_context(|| {
-                format!(
-                    "failed to copy {} to {}",
-                    template.display(),
-                    config_path.display()
-                )
-            })?;
-            println!("Switched to Linux/macOS configuration.");
-            println!("  {} -> {}", template.display(), config_path.display());
-            Ok(())
-        }
+        OsCommand::Windows => switch_os_config(state, dev_dir, &config_path, OsPlatform::Windows),
+        OsCommand::Linux => switch_os_config(state, dev_dir, &config_path, OsPlatform::Linux),
+        OsCommand::Macos => switch_os_config(state, dev_dir, &config_path, OsPlatform::Macos),
         OsCommand::Show => {
             if !config_path.exists() {
                 println!("No .dev/config.toml found.");
                 return Ok(());
             }
-            let content = fs::read_to_string(&config_path)?;
-            // Look for OS-specific patterns
-            let is_windows = content.contains("npx.cmd") || content.contains(".cmd\"");
-            let is_linux = content.contains("\"npx\"") && !content.contains("npx.cmd");
+            let detected = detect_os_config(dev_dir, &config_path)?;
 
             println!("Current OS configuration: {}", config_path.display());
-            if is_windows {
-                println!("  Detected: Windows (uses npx.cmd / .cmd extensions)");
-            } else if is_linux {
-                println!("  Detected: Linux/macOS (uses npx, no .cmd extensions)");
-            } else {
-                println!("  Detected: Unknown (no recognizable OS pattern)");
+            match detected {
+                Some(platform) => println!("  Detected: {}", platform.display_name()),
+                None => {
+                    println!("  Detected: Unknown (no matching OS template or platform markers)")
+                }
             }
 
             // Show available templates
-            let windows_exists = dev_dir.join("config.windows.toml").exists();
-            let linux_exists = dev_dir.join("config.linux.toml").exists();
             println!("\nAvailable templates:");
-            println!(
-                "  config.windows.toml: {}",
-                if windows_exists { "found" } else { "not found" }
-            );
-            println!(
-                "  config.linux.toml: {}",
-                if linux_exists { "found" } else { "not found" }
-            );
+            for platform in OsPlatform::ALL {
+                let template = dev_dir.join(platform.template_name());
+                println!(
+                    "  {}: {}",
+                    platform.template_name(),
+                    if template.exists() {
+                        "found"
+                    } else {
+                        "not found"
+                    }
+                );
+            }
             Ok(())
         }
     }
+}
+
+fn switch_os_config(
+    state: &AppState,
+    dev_dir: &Path,
+    config_path: &Path,
+    platform: OsPlatform,
+) -> Result<()> {
+    let template = dev_dir.join(platform.template_name());
+    if !template.exists() {
+        bail!(
+            "{} config template not found at {}. Create .dev/{} first.",
+            platform.display_name(),
+            template.display(),
+            platform.template_name()
+        );
+    }
+    if state.ctx.dry_run {
+        println!(
+            "(dry-run) would copy {} -> {}",
+            template.display(),
+            config_path.display()
+        );
+        return Ok(());
+    }
+    fs::copy(&template, config_path).with_context(|| {
+        format!(
+            "failed to copy {} to {}",
+            template.display(),
+            config_path.display()
+        )
+    })?;
+    println!("Switched to {} configuration.", platform.display_name());
+    println!("  {} -> {}", template.display(), config_path.display());
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OsPlatform {
+    Linux,
+    Windows,
+    Macos,
+}
+
+impl OsPlatform {
+    const ALL: [OsPlatform; 3] = [OsPlatform::Linux, OsPlatform::Windows, OsPlatform::Macos];
+
+    fn display_name(self) -> &'static str {
+        match self {
+            OsPlatform::Linux => "Linux",
+            OsPlatform::Windows => "Windows",
+            OsPlatform::Macos => "macOS",
+        }
+    }
+
+    fn template_name(self) -> &'static str {
+        match self {
+            OsPlatform::Linux => "config.linux.toml",
+            OsPlatform::Windows => "config.windows.toml",
+            OsPlatform::Macos => "config.macos.toml",
+        }
+    }
+}
+
+fn detect_os_config(dev_dir: &Path, config_path: &Path) -> Result<Option<OsPlatform>> {
+    let content = fs::read_to_string(config_path)
+        .with_context(|| format!("reading {}", config_path.display()))?;
+    let normalized = normalize_config_for_detection(&content);
+
+    for platform in OsPlatform::ALL {
+        let template = dev_dir.join(platform.template_name());
+        if !template.exists() {
+            continue;
+        }
+        let template_content = fs::read_to_string(&template)
+            .with_context(|| format!("reading {}", template.display()))?;
+        if normalize_config_for_detection(&template_content) == normalized {
+            return Ok(Some(platform));
+        }
+    }
+
+    Ok(detect_os_config_from_markers(&content))
+}
+
+fn normalize_config_for_detection(content: &str) -> String {
+    content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn detect_os_config_from_markers(content: &str) -> Option<OsPlatform> {
+    let lower = content.to_ascii_lowercase();
+
+    if lower.contains("devkit_os = \"windows\"")
+        || lower.contains("devkit_os = 'windows'")
+        || lower.contains("devkit_os=\"windows\"")
+    {
+        return Some(OsPlatform::Windows);
+    }
+    if lower.contains("devkit_os = \"macos\"")
+        || lower.contains("devkit_os = 'macos'")
+        || lower.contains("devkit_os=\"macos\"")
+    {
+        return Some(OsPlatform::Macos);
+    }
+    if lower.contains("devkit_os = \"linux\"")
+        || lower.contains("devkit_os = 'linux'")
+        || lower.contains("devkit_os=\"linux\"")
+    {
+        return Some(OsPlatform::Linux);
+    }
+
+    if lower.contains("windows")
+        || lower.contains("win32")
+        || lower.contains("powershell")
+        || lower.contains("pwsh")
+        || lower.contains("cmd.exe")
+        || lower.contains(".cmd")
+        || lower.contains(".exe")
+        || lower.contains("\\\\")
+    {
+        return Some(OsPlatform::Windows);
+    }
+
+    if lower.contains("macos")
+        || lower.contains("darwin")
+        || lower.contains("apple-darwin")
+        || lower.contains("brew ")
+        || lower.contains("homebrew")
+    {
+        return Some(OsPlatform::Macos);
+    }
+
+    if lower.contains("linux")
+        || lower.contains("gnu")
+        || lower.contains("linux/")
+        || lower.contains("ubuntu")
+        || lower.contains("apt-get")
+        || lower.contains("systemctl")
+    {
+        return Some(OsPlatform::Linux);
+    }
+
+    None
 }
 
 fn env_list(state: &AppState, raw: bool) -> Result<()> {
@@ -1392,6 +1484,52 @@ language = 'typescript'
 
         std::env::set_current_dir(old).unwrap();
         let _ = fs::remove_dir_all(root.as_std_path());
+    }
+
+    #[test]
+    fn os_detection_matches_generated_templates() {
+        let root = unique_temp_dir();
+        let dev_dir = root.join(".dev");
+        fs::create_dir_all(dev_dir.as_std_path()).unwrap();
+        fs::write(
+            dev_dir.join("config.toml").as_std_path(),
+            "default_language = 'rust'\n",
+        )
+        .unwrap();
+        fs::write(
+            dev_dir.join("config.linux.toml").as_std_path(),
+            "\n default_language = 'rust'\n",
+        )
+        .unwrap();
+
+        let detected = detect_os_config(
+            dev_dir.as_std_path(),
+            dev_dir.join("config.toml").as_std_path(),
+        )
+        .unwrap();
+        assert_eq!(detected, Some(OsPlatform::Linux));
+
+        let _ = fs::remove_dir_all(root.as_std_path());
+    }
+
+    #[test]
+    fn os_detection_uses_platform_markers() {
+        assert_eq!(
+            detect_os_config_from_markers(r#"command = ["pwsh", "-NoProfile"]"#),
+            Some(OsPlatform::Windows)
+        );
+        assert_eq!(
+            detect_os_config_from_markers(r#"runner = "macos-latest""#),
+            Some(OsPlatform::Macos)
+        );
+        assert_eq!(
+            detect_os_config_from_markers(r#"runner = "ubuntu-latest""#),
+            Some(OsPlatform::Linux)
+        );
+        assert_eq!(
+            detect_os_config_from_markers(r#"devkit_os = "windows""#),
+            Some(OsPlatform::Windows)
+        );
     }
 }
 

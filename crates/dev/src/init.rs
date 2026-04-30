@@ -105,7 +105,7 @@ pub(crate) fn run(ctx: &CliContext, args: InitArgs) -> Result<()> {
 
     let config = render_config(&languages);
     write_text_file(ctx, &config_path, &config, args.force, !args.yes)?;
-    println!("Wrote config: {}", config_path);
+    print_write_summary(ctx, "config", &config_path);
 
     if write_os_configs {
         for name in ["linux", "windows", "macos"] {
@@ -113,8 +113,9 @@ pub(crate) fn run(ctx: &CliContext, args: InitArgs) -> Result<()> {
                 .parent()
                 .expect("config path has parent")
                 .join(format!("config.{name}.toml"));
-            write_text_file(ctx, &path, &config, args.force, !args.yes)?;
-            println!("Wrote OS config: {}", path);
+            let os_config = render_os_config(name, &config);
+            write_text_file(ctx, &path, &os_config, args.force, !args.yes)?;
+            print_write_summary(ctx, "OS config", &path);
         }
     }
 
@@ -129,7 +130,7 @@ pub(crate) fn run(ctx: &CliContext, args: InitArgs) -> Result<()> {
         let workflow_path = Utf8PathBuf::from_path_buf(root.join(".github/workflows/dev-ci.yml"))
             .map_err(|_| anyhow!("workflow path must be valid UTF-8"))?;
         write_text_file(ctx, &workflow_path, &workflow, args.force, !args.yes)?;
-        println!("Wrote CI workflow: {}", workflow_path);
+        print_write_summary(ctx, "CI workflow", &workflow_path);
     }
 
     if install_tooling {
@@ -138,6 +139,14 @@ pub(crate) fn run(ctx: &CliContext, args: InitArgs) -> Result<()> {
 
     println!("dev init complete");
     Ok(())
+}
+
+fn print_write_summary(ctx: &CliContext, label: &str, path: &Utf8Path) {
+    if ctx.dry_run {
+        println!("Would write {label}: {path}");
+    } else {
+        println!("Wrote {label}: {path}");
+    }
 }
 
 fn select_languages(
@@ -544,6 +553,10 @@ default_language = "{default_language}"
     out
 }
 
+fn render_os_config(platform: &str, config: &str) -> String {
+    format!("devkit_os = \"{platform}\"\n\n{config}")
+}
+
 fn push_all_task(out: &mut String, verb: &str, languages: &[Language]) {
     let tasks: Vec<String> = languages
         .iter()
@@ -756,5 +769,13 @@ mod tests {
         assert!(config.contains("commands = [\"rust_ci\", \"py_ci\", \"ts_ci\"]"));
         assert!(config.contains("[languages.python.pipelines]"));
         assert!(config.contains("[languages.typescript.pipelines]"));
+    }
+
+    #[test]
+    fn render_os_config_adds_platform_marker() {
+        let config = render_os_config("macos", "default_language = \"rust\"\n");
+
+        assert!(config.starts_with("devkit_os = \"macos\""));
+        assert!(config.contains("default_language = \"rust\""));
     }
 }
