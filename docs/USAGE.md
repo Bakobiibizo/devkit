@@ -6,19 +6,22 @@ This guide introduces the top-level workflows provided by the `dev` binary and e
 
 - Rust toolchain with cargo available on `PATH`.
 - (Optional) [`gh`](https://cli.github.com) installed for release PR automation.
-- Default config at `~/.dev/config.toml` (generate one with `dev config generate`).
+- Project config at `.dev/config.toml` (create one with `dev init`).
 
 ## Quick Start
 
 ```bash
-# Generate example config (~/.dev/config.toml by default)
-dev config generate
+# Initialize devkit for the current project
+dev init
+
+# Noninteractive single-language defaults
+dev init --yes --language rust --ci
 
 # Inspect the current configuration
 dev config show
 
-# Run the lint workflow (language inferred from config)
-dev lint
+# Run the local CI gate. This runs every configured language.
+dev ci
 ```
 
 Global flags:
@@ -34,13 +37,22 @@ Global flags:
 
 - `dev list` – list known tasks and pipelines.
 - `dev run <task>` – run a raw task defined in config.
-- `dev fmt|lint|test|check|ci` – run the language pipeline.
+- `dev fmt|lint|test|check` – run the selected/default language pipeline.
+- `dev ci` – run the CI pipeline for every configured language.
 - `dev all <verb>` – run `fmt`, `lint`, etc. across every configured language.
+
+### Project Initialization
+
+- `dev init` – wizard for local `.dev/config.toml`, language scaffolds, optional tooling, and `.github/workflows/dev-ci.yml`.
+- `dev init --yes --language <name>` – create the default single-language setup without prompts.
+- `dev init --language rust --language python --ci` – configure a polyglot project and CI.
+- `dev init -g` – initialize `~/.dev/config.toml` instead of the current project.
+- `dev init --force` – overwrite dev-managed files that already exist.
 
 ### Configuration Helpers
 
 - `dev config show|check` – display a summary and validate the config.
-- `dev config generate [path] [--force]` – write the embedded example config.
+- `dev config generate [path] [--force]` – write the embedded example config directly.
 - `dev config reload` – reparse the config and print a summary.
 
 ### Environment File Utilities
@@ -75,7 +87,7 @@ Global flags:
 
 ## FAQ
 
-- **How do I overwrite the config?** Use `dev config generate --force`.
+- **How do I overwrite init-managed files?** Use `dev init --force`.
 - **How do I run workflows without mutating files?** Add `--dry-run` anywhere on the command line.
 - **How do I install language scaffolds?** Run `dev install` (optionally specify `rust`, `python`, or `typescript`).
 

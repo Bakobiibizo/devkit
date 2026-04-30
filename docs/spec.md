@@ -7,6 +7,7 @@
 * Uniform verbs across languages: `fmt, lint, type, test, fix, check, ci`.
 * Git flows: `branch-create`, `branch-finalize`, `release-pr`.
 * Version management: bump, tag, changelog.
+* Project initialization: `dev init` creates local `.dev` config, scaffolds, CI, and bootstrap binary.
 * Language management: `dev language <name>`, `dev install [<language>]` for scaffold + tool install.
 * Env management: `dev env`, `dev env add`, `dev env rm`.
 * Config management: `dev config`, `dev config check`, `dev config generate`.
@@ -31,6 +32,11 @@ Commands:
   start [--port <PORT>] [--prod]   Start a long-running dev server for the current project
   fmt|lint|type|test|fix|check|ci  Run verb for current or --language
   all <verb>                       Run monorepo aggregator (fmt|lint|type|test|fix|check|ci)
+
+  init [--yes] [-g|--global] [--force] [--language <NAME>...]
+       [--tooling|--no-tooling] [--ci|--no-ci] [--os-configs|--no-os-configs]
+                                    Wizard/noninteractive setup for .dev/config.toml,
+                                    optional project scaffolds, .dev/bin/dev, and CI
 
   language set <NAME>              Set default language in ~/.dev/config.toml
   install [<NAME>]                 Scaffold configs + install tooling (defaults to current language)
@@ -106,6 +112,7 @@ Use `toml_edit` so comments survive round-trip edits.
 ## Execution model
 
 * Composite tasks flatten into ordered command lists before execution.
+* `dev ci` runs the CI pipeline for every configured language so local behavior mirrors generated Actions workflows.
 * No implicit shell, run argv arrays directly. If a command contains shell syntax, run `["sh","-lc", "<cmd>"]`.
 * Stream output, prefix with `[k/N] <task> :: <argv>`.
 * Stop on first failure unless `allow_fail = true`.
@@ -515,4 +522,4 @@ pub enum ConfigCmd {
 3. Language installers with embedded templates.
 4. Git flows and version bump + changelog.
 5. `.env` add/rm/list.
-6. Ship a `Makefile` or `justfile`, push to GitHub. Then, immediately add a CI that runs `dev ci --all` on PRs.
+6. Run `dev init --ci`, commit the generated `.dev` files and workflow, and use `dev ci` locally before opening PRs.

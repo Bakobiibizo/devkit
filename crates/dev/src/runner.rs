@@ -19,7 +19,7 @@ use crate::cli::{
 use crate::config::{DevConfig, TaskUpdateMode};
 use crate::envfile;
 use crate::tasks::{CommandSpec, TaskIndex};
-use crate::{config, dockergen, gitops, scaffold, vault, versioning};
+use crate::{config, dockergen, gitops, init, scaffold, vault, versioning};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ConfigPathSource {
@@ -142,6 +142,7 @@ pub fn run(cli: Cli) -> Result<()> {
             skip_installed,
             no_deps,
         } => handle_setup(&ctx, command, skip_installed, no_deps),
+        Command::Init(args) => init::run(&ctx, args),
         Command::Review {
             output,
             include_working,
@@ -186,6 +187,7 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Ci => handle_verb(state, Verb::Ci),
         Command::All { verb } => handle_all(state, verb),
         Command::Install(args) => handle_install(state, args),
+        Command::Init(_) => unreachable!("init commands handled earlier"),
         Command::Language { command } => handle_language(state, command),
         Command::Git { command } => handle_git(state, command),
         Command::Version { command } => handle_version(state, command),
@@ -466,6 +468,10 @@ fn handle_start(state: &AppState, args: StartArgs) -> Result<()> {
 }
 
 fn handle_verb(state: &AppState, verb: Verb) -> Result<()> {
+    if verb == Verb::Ci {
+        return handle_all(state, verb);
+    }
+
     let language = state
         .effective_language(None)
         .ok_or_else(|| anyhow!("no language selected; pass --language or set default_language"))?;
@@ -1691,12 +1697,12 @@ fn install_commands(config: &DevConfig, language: &str) -> Option<Vec<Vec<String
 }
 
 #[derive(Clone, Debug)]
-struct CliContext {
+pub(crate) struct CliContext {
     chdir: Option<PathBuf>,
     file: Option<PathBuf>,
     project: Option<String>,
     language: Option<String>,
-    dry_run: bool,
+    pub(crate) dry_run: bool,
     verbose: u8,
     no_color: bool,
 }

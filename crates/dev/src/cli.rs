@@ -71,6 +71,8 @@ pub enum Command {
     },
     /// Install tooling and scaffolds for a language (defaults to configured language).
     Install(InstallArgs),
+    /// Initialize devkit for this project or global user config.
+    Init(InitArgs),
     /// Manage language defaults.
     Language {
         #[command(subcommand)]
@@ -284,6 +286,53 @@ pub enum LanguageCommand {
 pub struct InstallArgs {
     #[arg()]
     pub language: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct InitArgs {
+    /// Accept defaults without prompting.
+    #[arg(short = 'y', long = "yes", default_value_t = false)]
+    pub yes: bool,
+
+    /// Initialize the global ~/.dev/config.toml instead of local .dev/config.toml.
+    #[arg(short = 'g', long = "global", default_value_t = false)]
+    pub global: bool,
+
+    /// Overwrite dev-managed files when they already exist.
+    #[arg(long = "force", default_value_t = false)]
+    pub force: bool,
+
+    /// Language to configure. Repeat for polyglot projects.
+    #[arg(short = 'l', long = "language")]
+    pub languages: Vec<String>,
+
+    /// Also install/setup language tooling.
+    #[arg(long = "tooling", default_value_t = false)]
+    pub tooling: bool,
+
+    /// Do not install/setup language tooling.
+    #[arg(long = "no-tooling", default_value_t = false)]
+    pub no_tooling: bool,
+
+    /// Create .github/workflows/dev-ci.yml for local project init.
+    #[arg(long = "ci", default_value_t = false)]
+    pub ci: bool,
+
+    /// Skip .github/workflows/dev-ci.yml generation.
+    #[arg(long = "no-ci", default_value_t = false)]
+    pub no_ci: bool,
+
+    /// Generate OS-specific config variants in .dev/.
+    #[arg(long = "os-configs", default_value_t = false)]
+    pub os_configs: bool,
+
+    /// Skip OS-specific config variant generation.
+    #[arg(long = "no-os-configs", default_value_t = false)]
+    pub no_os_configs: bool,
+
+    /// Runner label for generated GitHub Actions workflow.
+    #[arg(long = "runner")]
+    pub runner: Option<String>,
 }
 
 #[derive(Args, Debug)]

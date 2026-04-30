@@ -3,6 +3,7 @@ mod config;
 mod dockergen;
 mod envfile;
 mod gitops;
+mod init;
 mod logging;
 mod review;
 mod runner;

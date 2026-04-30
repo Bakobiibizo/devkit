@@ -9,6 +9,7 @@ A unified developer workflow toolkit for Rust, Python, and TypeScript projects.
 A single-binary Rust CLI for unified developer workflows:
 
 - Config-driven task runner (pipelines: `fmt`, `lint`, `type`, `test`, `fix`, `check`, `ci`)
+- Project initialization wizard (`dev init`)
 - Language scaffolding + provisioning (`dev install`)
 - Git flows (`dev git ...`)
 - Versioning (`dev version ...`)
@@ -56,6 +57,9 @@ Download from [GitHub Releases](https://github.com/bakobiibizo/devkit/releases).
 ### Tasks and pipelines
 
 ```bash
+dev init
+dev init --yes --language rust --ci
+
 dev list
 dev run <task>
 
@@ -65,7 +69,7 @@ dev type
 dev test
 dev fix
 dev check
-dev ci
+dev ci          # runs every configured language
 
 dev all <fmt|lint|type|test|fix|check|ci>
 ```
