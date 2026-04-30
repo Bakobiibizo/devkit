@@ -1,0 +1,1 @@
+.dev/bin/dev* filter=lfs diff=lfs merge=lfs -text

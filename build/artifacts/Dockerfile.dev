@@ -1,0 +1,42 @@
+# syntax=docker/dockerfile:1.7
+
+FROM rust:1-bookworm
+
+ARG PACKAGE=devkit-cli
+ARG BIN=dev
+ARG TARGET=
+
+ENV CARGO_TERM_COLOR=always
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      git \
+      pkg-config \
+      libssl-dev \
+ && if [ "${TARGET}" = "x86_64-pc-windows-gnu" ]; then \
+      apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64; \
+    fi \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+COPY . .
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/workspace/target \
+    if [ -n "${TARGET}" ]; then \
+      rustup target add "${TARGET}" \
+      && cargo build --release --locked -p "${PACKAGE}" --bin "${BIN}" --target "${TARGET}" \
+      && mkdir -p /out \
+      && if [ "${TARGET}" = "x86_64-pc-windows-gnu" ]; then \
+        cp "target/${TARGET}/release/${BIN}.exe" "/out/${BIN}.exe"; \
+      else \
+        cp "target/${TARGET}/release/${BIN}" "/out/${BIN}"; \
+      fi; \
+    else \
+      cargo build --release --locked -p "${PACKAGE}" --bin "${BIN}" \
+      && mkdir -p /out \
+      && cp "target/release/${BIN}" "/out/${BIN}"; \
+    fi
