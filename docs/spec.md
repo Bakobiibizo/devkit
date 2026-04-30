@@ -8,6 +8,7 @@
 * Git flows: `branch-create`, `branch-finalize`, `release-pr`.
 * Version management: bump, tag, changelog.
 * Project initialization: `dev init` creates local `.dev` config, scaffolds, CI, and bootstrap binary.
+* Project entrypoints: `[entrypoints.<name>] command = [...]` forwards `dev <name> ...` to a project-local shim.
 * Language management: `dev language <name>`, `dev install [<language>]` for scaffold + tool install.
 * Env management: `dev env`, `dev env add`, `dev env rm`.
 * Config management: `dev config`, `dev config check`, `dev config generate`.
@@ -35,6 +36,7 @@ Commands:
 
   init [--yes] [-g|--global] [--force] [--language <NAME>...]
        [--tooling|--no-tooling] [--ci|--no-ci] [--os-configs|--no-os-configs]
+       [--research|--no-research]
                                     Wizard/noninteractive setup for .dev/config.toml,
                                     optional project scaffolds, .dev/bin/dev, and CI
 
@@ -104,6 +106,7 @@ Commands:
 * `default_language = "rust" | "python" | "typescript"`
 * `[tasks.<name>]` with `commands = [[...], ...]` or `["task_ref", ...]`
 * `[languages.<name>.pipelines] fmt|lint|type|test|fix|check|ci = ["task_a", "task_b"]`
+* `[entrypoints.<name>] command = [".dev/<name>"]` for project-local shims such as `dev research ...`.
 * Monorepo: `[tasks.all_fmt]`, `[tasks.all_check]`, etc.
 * `[git] main_branch, release_branch, version_file, changelog`
 

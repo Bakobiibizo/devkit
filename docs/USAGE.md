@@ -46,6 +46,7 @@ Global flags:
 - `dev init` – wizard for local `.dev/config.toml`, language scaffolds, optional tooling, and `.github/workflows/dev-ci.yml`.
 - `dev init --yes --language <name>` – create the default single-language setup without prompts.
 - `dev init --language rust --language python --ci` – configure a polyglot project and CI.
+- `dev init --research` – add `.dev/research` and a `dev research ...` entrypoint for a standalone `researchctl` binary.
 - `dev init -g` – initialize `~/.dev/config.toml` instead of the current project.
 - `dev init --force` – overwrite dev-managed files that already exist.
 
@@ -64,6 +65,11 @@ Global flags:
 ### Language Installers
 
 - `dev install [language]` – scaffold language-specific config files and run optional provisioning commands defined in config. Supports `--dry-run` to preview actions.
+
+### Entrypoints
+
+- `dev <name> ...` – if `[entrypoints.<name>]` exists, forward to that command with remaining args.
+- Example: `[entrypoints.research] command = [".dev/research"]` enables `dev research context`.
 
 ## Git Automation
 

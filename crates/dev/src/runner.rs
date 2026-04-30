@@ -125,9 +125,19 @@ struct ResolvedConfigPath {
 }
 
 pub fn run(cli: Cli) -> Result<()> {
-    let cli = normalize_external(cli)?;
+    let mut cli = cli;
     let ctx = CliContext::from(&cli);
     ctx.apply_chdir()?;
+    cli.chdir = None;
+
+    if let Command::External(extra) = &cli.command
+        && try_handle_entrypoint(&ctx, extra)?
+    {
+        return Ok(());
+    }
+
+    let cli = normalize_external(cli)?;
+    let ctx = CliContext::from(&cli);
 
     let _ = ctx.no_color;
     let _ = ctx.verbose;
@@ -171,6 +181,69 @@ pub fn run(cli: Cli) -> Result<()> {
             handle_with_state(&state, other)
         }
     }
+}
+
+fn try_handle_entrypoint(ctx: &CliContext, extra: &[String]) -> Result<bool> {
+    let Some(name) = extra.first() else {
+        return Ok(false);
+    };
+
+    let resolved = ctx.resolve_config_path()?;
+    if !resolved.path.exists() {
+        return Ok(false);
+    }
+
+    let config = config::load_from_path(&resolved.path)?;
+    let Some(entrypoints) = config.entrypoints.as_ref() else {
+        return Ok(false);
+    };
+    let Some(entrypoint) = entrypoints.get(name) else {
+        return Ok(false);
+    };
+    if entrypoint.command.is_empty() {
+        bail!("entrypoint `{name}` has an empty command");
+    }
+
+    let mut argv = resolve_entrypoint_command(&resolved.path, &entrypoint.command);
+    argv.extend(extra[1..].iter().cloned());
+
+    println!("Running entrypoint `{}`: {}", name, format_command(&argv));
+    if ctx.dry_run {
+        println!("    (dry-run) skipped");
+        return Ok(true);
+    }
+
+    let root = config_root_dir(&resolved.path);
+    let status = run_process_streaming_in_dir(&argv, &root)?;
+    if status.success() {
+        Ok(true)
+    } else {
+        bail!(
+            "entrypoint `{}` failed with exit code {:?}",
+            name,
+            status.code()
+        )
+    }
+}
+
+fn resolve_entrypoint_command(config_path: &Utf8PathBuf, command: &[String]) -> Vec<String> {
+    let Some(first) = command.first() else {
+        return Vec::new();
+    };
+    let first_path = Path::new(first);
+    if first_path.is_absolute() {
+        return command.to_vec();
+    }
+
+    let root = config_root_dir(config_path);
+    let candidate = root.join(first_path);
+    if candidate.exists() {
+        let mut resolved = command.to_vec();
+        resolved[0] = candidate.display().to_string();
+        return resolved;
+    }
+
+    command.to_vec()
 }
 
 fn handle_with_state(state: &AppState, command: Command) -> Result<()> {

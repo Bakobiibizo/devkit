@@ -332,6 +332,14 @@ pub struct InitArgs {
     #[arg(long = "no-os-configs", default_value_t = false)]
     pub no_os_configs: bool,
 
+    /// Create a .dev/research shim and `dev research ...` entrypoint.
+    #[arg(long = "research", default_value_t = false)]
+    pub research: bool,
+
+    /// Skip the research entrypoint prompt.
+    #[arg(long = "no-research", default_value_t = false)]
+    pub no_research: bool,
+
     /// Runner label for generated GitHub Actions workflow.
     #[arg(long = "runner")]
     pub runner: Option<String>,

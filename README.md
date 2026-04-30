@@ -10,6 +10,7 @@ A single-binary Rust CLI for unified developer workflows:
 
 - Config-driven task runner (pipelines: `fmt`, `lint`, `type`, `test`, `fix`, `check`, `ci`)
 - Project initialization wizard (`dev init`)
+- Project-local entrypoints (`dev research ...` via `[entrypoints.research]`)
 - Language scaffolding + provisioning (`dev install`)
 - Git flows (`dev git ...`)
 - Versioning (`dev version ...`)
@@ -59,6 +60,7 @@ Download from [GitHub Releases](https://github.com/bakobiibizo/devkit/releases).
 ```bash
 dev init
 dev init --yes --language rust --ci
+dev init --research
 
 dev list
 dev run <task>

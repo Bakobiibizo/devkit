@@ -48,6 +48,9 @@ pub(crate) fn run(ctx: &CliContext, args: InitArgs) -> Result<()> {
     if args.os_configs && args.no_os_configs {
         bail!("--os-configs and --no-os-configs cannot be used together");
     }
+    if args.research && args.no_research {
+        bail!("--research and --no-research cannot be used together");
+    }
 
     let theme = ColorfulTheme::default();
     let cwd = env_current_dir()?;
@@ -90,6 +93,17 @@ pub(crate) fn run(ctx: &CliContext, args: InitArgs) -> Result<()> {
             .interact()?
     };
 
+    let write_research = if args.global || args.no_research {
+        false
+    } else if args.research || args.yes {
+        args.research
+    } else {
+        Confirm::with_theme(&theme)
+            .with_prompt("Create researchctl shim for `dev research ...`?")
+            .default(false)
+            .interact()?
+    };
+
     let root = if args.global {
         home_dir()?
     } else {
@@ -103,7 +117,7 @@ pub(crate) fn run(ctx: &CliContext, args: InitArgs) -> Result<()> {
             .map_err(|_| anyhow!("local config path must be valid UTF-8"))?
     };
 
-    let config = render_config(&languages);
+    let config = render_config(&languages, write_research);
     write_text_file(ctx, &config_path, &config, args.force, !args.yes)?;
     print_write_summary(ctx, "config", &config_path);
 
@@ -121,6 +135,9 @@ pub(crate) fn run(ctx: &CliContext, args: InitArgs) -> Result<()> {
 
     if !args.global {
         scaffold_project_files(ctx, &root, &languages, args.force, !args.yes)?;
+        if write_research {
+            write_research_shim(ctx, &root, args.force, !args.yes)?;
+        }
     }
 
     if write_ci {
@@ -444,6 +461,33 @@ fn write_combined_gitignore(
     )
 }
 
+fn write_research_shim(
+    ctx: &CliContext,
+    root: &Path,
+    force: bool,
+    interactive: bool,
+) -> Result<()> {
+    let path = Utf8PathBuf::from_path_buf(root.join(".dev/research"))
+        .map_err(|_| anyhow!("research shim path must be valid UTF-8"))?;
+    write_text_file(ctx, &path, RESEARCH_SHIM, force, interactive)?;
+
+    if !ctx.dry_run {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(path.as_std_path())
+                .with_context(|| format!("reading metadata for {}", path))?
+                .permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(path.as_std_path(), perms)
+                .with_context(|| format!("setting executable permissions on {}", path))?;
+        }
+    }
+
+    print_write_summary(ctx, "research shim", &path);
+    Ok(())
+}
+
 fn write_template_if_missing(
     ctx: &CliContext,
     destination: PathBuf,
@@ -522,7 +566,7 @@ fn install_selected_tooling(
     crate::setup::run_setup(&setup_ctx, components, true, false)
 }
 
-fn render_config(languages: &[Language]) -> String {
+fn render_config(languages: &[Language], include_research: bool) -> String {
     let default_language = languages.first().map(Language::as_str).unwrap_or("rust");
     let mut out = format!(
         r#"# dev configuration file
@@ -549,6 +593,9 @@ default_language = "{default_language}"
     push_all_task(&mut out, "fix", languages);
     push_all_task(&mut out, "check", languages);
     push_all_task(&mut out, "ci", languages);
+    if include_research {
+        out.push_str(RESEARCH_ENTRYPOINT_CONFIG);
+    }
     out.push_str(GIT_ENV_CONFIG);
     out
 }
@@ -746,13 +793,32 @@ const GIT_ENV_CONFIG: &str = r#"
 # optional = ["LOG_LEVEL"]
 "#;
 
+const RESEARCH_ENTRYPOINT_CONFIG: &str = r#"
+# ===================== Entrypoints ========================
+
+[entrypoints.research]
+command = [".dev/research"]
+"#;
+
+const RESEARCH_SHIM: &str = r#"#!/usr/bin/env sh
+set -eu
+
+if command -v researchctl >/dev/null 2>&1; then
+  exec researchctl "$@"
+fi
+
+echo "researchctl is not installed or is not on PATH." >&2
+echo "Install the standalone researchctl binary, then rerun: dev research $*" >&2
+exit 127
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn render_config_keeps_single_language_configs_small() {
-        let config = render_config(&[Language::Rust]);
+        let config = render_config(&[Language::Rust], false);
 
         assert!(config.contains("default_language = \"rust\""));
         assert!(config.contains("[tasks.rust_ci]"));
@@ -763,7 +829,10 @@ mod tests {
 
     #[test]
     fn render_config_aggregates_selected_polyglot_languages() {
-        let config = render_config(&[Language::Rust, Language::Python, Language::TypeScript]);
+        let config = render_config(
+            &[Language::Rust, Language::Python, Language::TypeScript],
+            false,
+        );
 
         assert!(config.contains("[tasks.all_ci]"));
         assert!(config.contains("commands = [\"rust_ci\", \"py_ci\", \"ts_ci\"]"));
@@ -777,5 +846,13 @@ mod tests {
 
         assert!(config.starts_with("devkit_os = \"macos\""));
         assert!(config.contains("default_language = \"rust\""));
+    }
+
+    #[test]
+    fn render_config_can_include_research_entrypoint() {
+        let config = render_config(&[Language::Rust], true);
+
+        assert!(config.contains("[entrypoints.research]"));
+        assert!(config.contains("command = [\".dev/research\"]"));
     }
 }

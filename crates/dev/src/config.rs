@@ -18,6 +18,7 @@ pub struct DevConfig {
     pub projects: Option<BTreeMap<String, Project>>,
     pub tasks: Option<BTreeMap<String, Task>>,
     pub languages: Option<BTreeMap<String, Language>>,
+    pub entrypoints: Option<BTreeMap<String, Entrypoint>>,
     pub git: Option<GitConfig>,
     pub env: Option<EnvConfig>,
     pub setup: Option<SetupProjectConfig>,
@@ -121,6 +122,11 @@ pub struct Language {
     pub pipelines: Option<Pipelines>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct Entrypoint {
+    pub command: Vec<String>,
+}
+
 #[derive(Debug, Deserialize, Default)]
 pub struct Pipelines {
     pub fmt: Option<Vec<String>>,
@@ -189,10 +195,12 @@ pub fn format_summary(config: &DevConfig) -> String {
     let default_language = config.default_language.as_deref().unwrap_or("<none>");
     let task_count = config.tasks.as_ref().map(|t| t.len()).unwrap_or(0);
     let language_count = config.languages.as_ref().map(|l| l.len()).unwrap_or(0);
+    let entrypoint_count = config.entrypoints.as_ref().map(|e| e.len()).unwrap_or(0);
 
     let _ = writeln!(out, "Default language: {}", default_language);
     let _ = writeln!(out, "Tasks defined: {}", task_count);
     let _ = writeln!(out, "Languages configured: {}", language_count);
+    let _ = writeln!(out, "Entrypoints configured: {}", entrypoint_count);
 
     if let Some(languages) = &config.languages {
         for (name, language) in languages {
