@@ -20,6 +20,7 @@ pub struct DevConfig {
     pub languages: Option<BTreeMap<String, Language>>,
     pub git: Option<GitConfig>,
     pub env: Option<EnvConfig>,
+    pub setup: Option<SetupProjectConfig>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -144,6 +145,11 @@ pub struct GitConfig {
 pub struct EnvConfig {
     pub required: Option<Vec<String>>,
     pub optional: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetupProjectConfig {
+    pub extra_packages: Option<Vec<String>>,
 }
 
 /// Load a configuration file from disk and deserialize it.

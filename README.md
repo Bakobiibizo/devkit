@@ -14,6 +14,7 @@ A single-binary Rust CLI for unified developer workflows:
 - Versioning (`dev version ...`)
 - `.env` helpers (`dev env ...`)
 - System setup (`dev setup ...`)
+- Automatic `mise` toolchain activation for repos with `.tool-versions` or `mise.toml`
 - Dockerized GPU dev containers (`dev docker ...`)
 - Review overlays and directory manifests (`dev review`, `dev walk`)
 
@@ -176,6 +177,8 @@ dev setup status
 dev setup list
 dev setup config
 ```
+
+Default setup now includes `mise`, so fresh repo bootstrap installs the version manager before language-specific tooling. When `mise` is available and the current repo defines `.tool-versions` or `mise.toml`, `dev` automatically runs task commands through `mise exec -- ...`.
 
 ## Review + walk
 

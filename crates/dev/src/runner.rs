@@ -1,3 +1,4 @@
+use std::env;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, Stdio};
@@ -1440,13 +1441,14 @@ fn execute_commands(state: &AppState, task: &str, commands: &[CommandSpec]) -> R
 }
 
 fn run_process(argv: &[String]) -> Result<std::process::ExitStatus> {
-    let mut command = ProcessCommand::new(&argv[0]);
-    if argv.len() > 1 {
-        command.args(&argv[1..]);
+    let resolved = resolve_runtime_command(argv, None);
+    let mut command = ProcessCommand::new(&resolved[0]);
+    if resolved.len() > 1 {
+        command.args(&resolved[1..]);
     }
     command
         .status()
-        .with_context(|| format!("executing `{}`", format_command(argv)))
+        .with_context(|| format!("executing `{}`", format_command(&resolved)))
 }
 
 fn format_command(argv: &[String]) -> String {
@@ -1483,15 +1485,16 @@ fn run_external_command(argv: &[String]) -> Result<()> {
 }
 
 fn run_process_streaming(argv: &[String]) -> Result<std::process::ExitStatus> {
-    let mut command = ProcessCommand::new(&argv[0]);
-    if argv.len() > 1 {
-        command.args(&argv[1..]);
+    let resolved = resolve_runtime_command(argv, None);
+    let mut command = ProcessCommand::new(&resolved[0]);
+    if resolved.len() > 1 {
+        command.args(&resolved[1..]);
     }
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let mut child = command
         .spawn()
-        .with_context(|| format!("executing `{}`", format_command(argv)))?;
+        .with_context(|| format!("executing `{}`", format_command(&resolved)))?;
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -1521,7 +1524,7 @@ fn run_process_streaming(argv: &[String]) -> Result<std::process::ExitStatus> {
 
     child
         .wait()
-        .with_context(|| format!("waiting on `{}`", format_command(argv)))
+        .with_context(|| format!("waiting on `{}`", format_command(&resolved)))
 }
 
 fn strip_compose_container_name(path: &Path) -> Result<bool> {
@@ -1551,16 +1554,21 @@ fn strip_compose_container_name(path: &Path) -> Result<bool> {
 }
 
 fn run_process_streaming_in_dir(argv: &[String], cwd: &Path) -> Result<std::process::ExitStatus> {
-    let mut command = ProcessCommand::new(&argv[0]);
-    if argv.len() > 1 {
-        command.args(&argv[1..]);
+    let resolved = resolve_runtime_command(argv, Some(cwd));
+    let mut command = ProcessCommand::new(&resolved[0]);
+    if resolved.len() > 1 {
+        command.args(&resolved[1..]);
     }
     command.current_dir(cwd);
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
-    let mut child = command
-        .spawn()
-        .with_context(|| format!("executing `{}` in {}", format_command(argv), cwd.display()))?;
+    let mut child = command.spawn().with_context(|| {
+        format!(
+            "executing `{}` in {}",
+            format_command(&resolved),
+            cwd.display()
+        )
+    })?;
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -1590,7 +1598,71 @@ fn run_process_streaming_in_dir(argv: &[String], cwd: &Path) -> Result<std::proc
 
     child
         .wait()
-        .with_context(|| format!("waiting on `{}`", format_command(argv)))
+        .with_context(|| format!("waiting on `{}`", format_command(&resolved)))
+}
+
+fn resolve_runtime_command(argv: &[String], cwd: Option<&Path>) -> Vec<String> {
+    if argv.is_empty() || should_skip_mise_wrap(argv) || !should_use_mise(cwd) {
+        return argv.to_vec();
+    }
+
+    let mut wrapped = Vec::with_capacity(argv.len() + 3);
+    wrapped.push("mise".to_owned());
+    wrapped.push("exec".to_owned());
+    wrapped.push("--".to_owned());
+    wrapped.extend(argv.iter().cloned());
+    wrapped
+}
+
+fn should_skip_mise_wrap(argv: &[String]) -> bool {
+    matches!(
+        argv.first().map(|value| value.as_str()),
+        None | Some("mise")
+    )
+}
+
+fn should_use_mise(cwd: Option<&Path>) -> bool {
+    if env::var_os("DEV_NO_MISE").is_some() {
+        return false;
+    }
+
+    if !command_exists("mise") {
+        return false;
+    }
+
+    let start = match cwd {
+        Some(path) => path.to_path_buf(),
+        None => match env::current_dir() {
+            Ok(path) => path,
+            Err(_) => return false,
+        },
+    };
+
+    find_mise_config(&start).is_some()
+}
+
+fn find_mise_config(start: &Path) -> Option<std::path::PathBuf> {
+    for dir in start.ancestors() {
+        let tool_versions = dir.join(".tool-versions");
+        if tool_versions.is_file() {
+            return Some(tool_versions);
+        }
+
+        let mise_toml = dir.join("mise.toml");
+        if mise_toml.is_file() {
+            return Some(mise_toml);
+        }
+    }
+
+    None
+}
+
+fn command_exists(cmd: &str) -> bool {
+    ProcessCommand::new("which")
+        .arg(cmd)
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
 }
 
 fn pipeline_for_language(config: &DevConfig, language: &str, verb: Verb) -> Option<Vec<String>> {
@@ -1901,8 +1973,40 @@ fn handle_setup(
         std::fs::create_dir_all(parent)?;
     }
 
-    // Create setup context
-    let setup_config = SetupConfig::default();
+    // Create setup context with extra_packages from project config if available
+    let mut setup_config = SetupConfig::default();
+
+    // Try to load project config for extra_packages
+    match ctx.resolve_config_path() {
+        Ok(resolved) => {
+            println!("[setup] Resolved config path: {}", resolved.path);
+            if resolved.path.exists() {
+                match crate::config::load_from_path(&resolved.path) {
+                    Ok(dev_config) => {
+                        if let Some(ref project_setup) = dev_config.setup {
+                            if let Some(ref extra) = project_setup.extra_packages {
+                                println!("[setup] Found extra_packages: {:?}", extra);
+                                setup_config.extra_packages = extra.clone();
+                            } else {
+                                println!("[setup] No extra_packages in setup section");
+                            }
+                        } else {
+                            println!("[setup] No [setup] section in config");
+                        }
+                    }
+                    Err(e) => {
+                        println!("[setup] Failed to load config: {}", e);
+                    }
+                }
+            } else {
+                println!("[setup] Config path does not exist: {}", resolved.path);
+            }
+        }
+        Err(e) => {
+            println!("[setup] Failed to resolve config path: {}", e);
+        }
+    }
+
     let setup_ctx = SetupContext::new(ctx.dry_run, Some(log_file), setup_config)?;
 
     match command {

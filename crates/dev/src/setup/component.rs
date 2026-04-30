@@ -30,6 +30,7 @@ pub enum InstallMode {
 pub enum Component {
     SystemPackages,
     GitLfs,
+    Mise,
     Uv,
     Rustup,
     Node,
@@ -51,6 +52,7 @@ impl Component {
         vec![
             Component::SystemPackages,
             Component::GitLfs,
+            Component::Mise,
             Component::Uv,
             Component::Rustup,
             Component::Node,
@@ -72,6 +74,7 @@ impl Component {
         match self {
             Component::SystemPackages => "system_packages",
             Component::GitLfs => "git_lfs",
+            Component::Mise => "mise",
             Component::Uv => "uv",
             Component::Rustup => "rustup",
             Component::Node => "node",
@@ -93,6 +96,7 @@ impl Component {
         match s {
             "system_packages" => Ok(Component::SystemPackages),
             "git_lfs" => Ok(Component::GitLfs),
+            "mise" => Ok(Component::Mise),
             "uv" => Ok(Component::Uv),
             "rustup" => Ok(Component::Rustup),
             "node" => Ok(Component::Node),
@@ -127,6 +131,7 @@ impl Component {
         match self {
             Component::SystemPackages => super::system::detect_system_packages(ctx),
             Component::GitLfs => super::system::detect_git_lfs(ctx),
+            Component::Mise => super::system::detect_mise(ctx),
             Component::Uv => super::system::detect_uv(ctx),
             Component::Rustup => super::system::detect_rustup(ctx),
             Component::Node => super::system::detect_node(ctx),
@@ -148,6 +153,7 @@ impl Component {
         match self {
             Component::SystemPackages => super::system::install_system_packages(ctx),
             Component::GitLfs => super::system::install_git_lfs(ctx),
+            Component::Mise => super::system::install_mise(ctx),
             Component::Uv => super::system::install_uv(ctx),
             Component::Rustup => super::system::install_rustup(ctx),
             Component::Node => super::system::install_node(ctx),

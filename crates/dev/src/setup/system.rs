@@ -1,6 +1,7 @@
 use super::component::InstallState;
 use super::context::SetupContext;
 use anyhow::Result;
+use std::path::Path;
 
 /// Detect system packages installation state
 pub fn detect_system_packages(ctx: &SetupContext) -> Result<InstallState> {
@@ -46,7 +47,7 @@ pub fn install_system_packages(ctx: &SetupContext) -> Result<()> {
 
     ctx.log.ok(component, "Installing system dependencies");
 
-    let packages = vec![
+    let mut packages: Vec<&str> = vec![
         "build-essential",
         "libssl-dev",
         "libffi-dev",
@@ -70,6 +71,25 @@ pub fn install_system_packages(ctx: &SetupContext) -> Result<()> {
         "git",
         "git-lfs",
     ];
+
+    // Add extra packages from project config
+    let extra_refs: Vec<&str> = ctx
+        .config
+        .extra_packages
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
+    packages.extend(extra_refs);
+
+    if !ctx.config.extra_packages.is_empty() {
+        ctx.log.ok(
+            component,
+            &format!(
+                "Including extra packages: {}",
+                ctx.config.extra_packages.join(", ")
+            ),
+        );
+    }
 
     ctx.execute(
         component,
@@ -147,6 +167,75 @@ pub fn detect_uv(ctx: &SetupContext) -> Result<InstallState> {
     } else {
         Ok(InstallState::NotInstalled)
     }
+}
+
+/// Detect mise
+pub fn detect_mise(ctx: &SetupContext) -> Result<InstallState> {
+    if ctx.command_exists("mise") {
+        let output = std::process::Command::new("mise")
+            .arg("--version")
+            .output()?;
+
+        if output.status.success() {
+            let version = String::from_utf8_lossy(&output.stdout);
+            let version_str = version.trim().to_string();
+            return Ok(InstallState::Installed {
+                version: Some(version_str),
+                details: vec![],
+            });
+        }
+    }
+
+    let home = std::env::var("HOME")?;
+    let local_mise = Path::new(&home).join(".local").join("bin").join("mise");
+
+    if local_mise.exists() {
+        return Ok(InstallState::Partial {
+            reasons: vec![
+                "mise installed but not in PATH (source your shell rc or add ~/.local/bin)"
+                    .to_string(),
+            ],
+        });
+    }
+
+    Ok(InstallState::NotInstalled)
+}
+
+/// Install mise
+pub fn install_mise(ctx: &SetupContext) -> Result<()> {
+    let component = "mise";
+
+    if !ctx.command_exists("curl") {
+        anyhow::bail!("curl is required but not installed");
+    }
+
+    ctx.log.ok(component, "Installing mise");
+
+    if ctx.dry_run {
+        ctx.log.dry_run(component, "curl https://mise.run | sh");
+        ctx.log.dry_run(
+            component,
+            "Add 'eval \"$(mise activate bash)\"' to ~/.bashrc if not already present",
+        );
+        return Ok(());
+    }
+
+    let output = std::process::Command::new("sh")
+        .arg("-c")
+        .arg("curl https://mise.run | sh")
+        .output()?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("Failed to install mise: {}", stderr);
+    }
+
+    ctx.log.ok(component, "mise installed successfully");
+    ctx.log.ok(
+        component,
+        "If needed, add 'eval \"$(mise activate bash)\"' to ~/.bashrc and reopen your shell",
+    );
+    Ok(())
 }
 
 /// Install uv

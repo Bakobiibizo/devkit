@@ -155,6 +155,8 @@ pub struct SetupConfig {
     pub node_version: String,
     pub default_components: Vec<String>,
     pub skip_components: Vec<String>,
+    /// Extra system packages to install (project-specific)
+    pub extra_packages: Vec<String>,
 }
 
 impl Default for SetupConfig {
@@ -167,12 +169,14 @@ impl Default for SetupConfig {
             default_components: vec![
                 "system_packages".to_string(),
                 "git_lfs".to_string(),
+                "mise".to_string(),
                 "uv".to_string(),
                 "rustup".to_string(),
                 "node".to_string(),
                 "pnpm".to_string(),
             ],
             skip_components: Vec::new(),
+            extra_packages: Vec::new(),
         }
     }
 }
