@@ -2,6 +2,36 @@
 
 default_language = "rust"
 
+[summary]
+# `dev summary ...` runs commands through this shell using `-lc`.
+shell = "bash"
+# Bound captured stdout/stderr before sending it to a summary command.
+max_output_bytes = 65536
+tail_bytes = 12288
+# Optional: command receives a prompt on stdin and prints the summary on stdout.
+# llm_command = "your-llm-summarizer"
+
+default_agent = "codex-low-cost"
+
+[agents.codex-low-cost]
+adapter = "codex"
+model = "gpt-5-mini"
+cwd = "."
+extra_args = ["--ask-for-approval", "never", "--sandbox", "workspace-write"]
+
+[agents.generic-example]
+adapter = "generic"
+command = ["bash", "-lc", "printf 'model=%s cwd=%s\\n' \"$DEV_AGENT_MODEL\" \"$DEV_AGENT_CWD\"; cat"]
+model = "cheap-model"
+cwd = "."
+
+[agents.codex-loop]
+adapter = "loop"
+command = ["bash", "-lc", "codex exec --model \"$DEV_AGENT_MODEL\" --cd \"$DEV_AGENT_CWD\" -"]
+model = "gpt-5-mini"
+cwd = "."
+iterations = 3
+
 # ===================== Rust ========================
 
 [tasks.rust_build]
@@ -229,7 +259,7 @@ commands = [
 [languages.rust]
 install = [
   ["cargo", "install", "cargo-audit"],
-  ["cargo", "install", "cargo-deny", "--version", "0.18.3"],
+  ["cargo", "install", "cargo-deny", "--version", "0.19.0", "--locked"],
   ["cargo", "install", "cargo-udeps", "--version", "0.1.56", "--locked"]
 ]
 

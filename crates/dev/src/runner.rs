@@ -1,8 +1,8 @@
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command as ProcessCommand, Stdio};
+use std::process::{Command as ProcessCommand, ExitStatus, Stdio};
 use std::thread;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use std::{fs, io};
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -10,10 +10,10 @@ use camino::Utf8PathBuf;
 use clap::Parser;
 
 use crate::cli::{
-    Cli, Command, ConfigCommand, DockerBuildArgs, DockerCommand, DockerComposeCommand,
-    DockerComposeUpCommand, DockerComposeUpBuildArgs, DockerInitArgs, EnvArgs, EnvCommand,
-    GitCommand, InstallArgs, LanguageCommand, OsCommand, ResearchCommand, ResearchInitArgs,
-    SetupCommand, StartArgs, VaultCommand, Verb, VersionCommand,
+    AgentCommand, Cli, Command, ConfigCommand, DockerBuildArgs, DockerCommand,
+    DockerComposeCommand, DockerComposeUpBuildArgs, DockerComposeUpCommand, DockerInitArgs,
+    EnvArgs, EnvCommand, GitCommand, InstallArgs, LanguageCommand, OsCommand, ResearchCommand,
+    ResearchInitArgs, SetupCommand, StartArgs, SummaryCommand, VaultCommand, Verb, VersionCommand,
 };
 use crate::config::{DevConfig, TaskUpdateMode};
 use crate::envfile;
@@ -35,12 +35,11 @@ fn config_root_dir(config_path: &Utf8PathBuf) -> PathBuf {
         return parent.parent().unwrap_or(parent).to_path_buf();
     }
 
-    if parent.file_name() == Some(std::ffi::OsStr::new("dev")) {
-        if let Some(tools) = parent.parent() {
-            if tools.file_name() == Some(std::ffi::OsStr::new("tools")) {
-                return tools.parent().unwrap_or(tools).to_path_buf();
-            }
-        }
+    if parent.file_name() == Some(std::ffi::OsStr::new("dev"))
+        && let Some(tools) = parent.parent()
+        && tools.file_name() == Some(std::ffi::OsStr::new("tools"))
+    {
+        return tools.parent().unwrap_or(tools).to_path_buf();
     }
 
     parent.to_path_buf()
@@ -62,6 +61,15 @@ struct ResolvedConfigPath {
     source: ConfigPathSource,
 }
 
+struct WalkRequest {
+    directory: PathBuf,
+    output: PathBuf,
+    max_depth: u32,
+    no_content: bool,
+    extensions: Option<Vec<String>>,
+    include_hidden: bool,
+}
+
 pub fn run(cli: Cli) -> Result<()> {
     let cli = normalize_external(cli)?;
     let ctx = CliContext::from(&cli);
@@ -75,29 +83,34 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Language {
             command: LanguageCommand::Set { name },
         } => handle_language_set(&ctx, name),
-        Command::Setup { command, skip_installed, no_deps } => {
-            handle_setup(&ctx, command, skip_installed, no_deps)
-        }
-        Command::Review { output, include_working, main } => {
-            handle_review(&ctx, output, include_working, main)
-        }
+        Command::Setup {
+            command,
+            skip_installed,
+            no_deps,
+        } => handle_setup(&ctx, command, skip_installed, no_deps),
+        Command::Review {
+            output,
+            include_working,
+            main,
+        } => handle_review(&ctx, output, include_working, main),
         Command::Walk {
             directory,
             output,
-            format,
+            format: _format,
             max_depth,
             no_content,
             extensions,
             include_hidden,
         } => handle_walk(
             &ctx,
-            directory,
-            output,
-            format,
-            max_depth,
-            no_content,
-            extensions,
-            include_hidden,
+            WalkRequest {
+                directory,
+                output,
+                max_depth,
+                no_content,
+                extensions,
+                include_hidden,
+            },
         ),
         other => {
             let state = AppState::new(ctx)?;
@@ -132,6 +145,8 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Setup { .. } => unreachable!("setup commands handled earlier"),
         Command::Review { .. } => unreachable!("review commands handled earlier"),
         Command::Walk { .. } => unreachable!("walk commands handled earlier"),
+        Command::Summary { command } => handle_summary(state, command),
+        Command::Agent { command } => handle_agent(state, command),
         Command::External(extra) => {
             bail!("unknown command: {}", extra.join(" "))
         }
@@ -150,9 +165,7 @@ fn research_init(state: &AppState, args: ResearchInitArgs) -> Result<()> {
     } else {
         std::env::current_dir()?.join(&args.directory)
     };
-    let target = target
-        .canonicalize()
-        .unwrap_or_else(|_| target.clone());
+    let target = target.canonicalize().unwrap_or_else(|_| target.clone());
 
     let project_name = args.name.unwrap_or_else(|| {
         target
@@ -173,7 +186,10 @@ fn research_init(state: &AppState, args: ResearchInitArgs) -> Result<()> {
     }
 
     if state.ctx.dry_run {
-        println!("[dry-run] would initialize research project at {}", target.display());
+        println!(
+            "[dry-run] would initialize research project at {}",
+            target.display()
+        );
         println!("[dry-run] project name: {}", project_name);
         println!("[dry-run] package name: {}", package_name);
         if !args.skip_install {
@@ -185,8 +201,7 @@ fn research_init(state: &AppState, args: ResearchInitArgs) -> Result<()> {
         return Ok(());
     }
 
-    fs::create_dir_all(&target)
-        .with_context(|| format!("creating {}", target.display()))?;
+    fs::create_dir_all(&target).with_context(|| format!("creating {}", target.display()))?;
 
     let project_yaml = format!(
         "name: {name}\nversion: \"0.1.0\"\ndescription: \"\"\n\nexperiments:\n  - id: example\n    module: experiments.example\n    callable: run\n    description: \"Example experiment\"\n\nconfig:\n  default: configs/default.yaml\n\ndatasets: []\n\nthresholds: configs/thresholds.yaml\n\noutputs:\n  format: parquet\n",
@@ -199,7 +214,8 @@ fn research_init(state: &AppState, args: ResearchInitArgs) -> Result<()> {
     let example_exp = "\"\"\"Example experiment module.\"\"\"\n\n\ndef run(seed: int, output_dir, **kwargs):\n    \"\"\"Run the example experiment.\"\"\"\n    return {\"status\": \"ok\", \"seed\": seed}\n";
     let package_init = format!("\"\"\"Reusable package for {}.\"\"\"\n", project_name);
     let bindings_init = "\"\"\"Bindings for target systems.\"\"\"\n";
-    let binding_example = "\"\"\"Example binding stub.\n\nImplement clean-room adapters here.\n\"\"\"\n";
+    let binding_example =
+        "\"\"\"Example binding stub.\n\nImplement clean-room adapters here.\n\"\"\"\n";
     let analysis_tpl = "# Analysis Report\n\n## Scope\n- Hypothesis:\n- Dataset(s):\n- Config + seed policy:\n\n## Results\n- Run IDs:\n- Threshold outcomes:\n- Key observations:\n\n## Risks / Caveats\n-\n";
     let synthesis_tpl = "# Meta-Synthesis\n\n## Experiments Included\n-\n\n## Cross-Experiment Findings\n-\n\n## Plain-Language Overview\n-\n";
     let env_example = "HARNESS_HOME=.harness\n";
@@ -250,10 +266,7 @@ fn research_init(state: &AppState, args: ResearchInitArgs) -> Result<()> {
         args.force,
     )?;
     write_scaffold_file(
-        &target
-            .join("reports")
-            .join("templates")
-            .join("analysis.md"),
+        &target.join("reports").join("templates").join("analysis.md"),
         analysis_tpl,
         args.force,
     )?;
@@ -585,7 +598,7 @@ fn handle_start(state: &AppState, args: StartArgs) -> Result<()> {
         "--host".to_owned(),
     ];
 
-    let port = args.port.or_else(|| if args.prod { Some(8091) } else { None });
+    let port = args.port.or(if args.prod { Some(8091) } else { None });
     if let Some(port) = port {
         argv.push("--port".to_owned());
         argv.push(port.to_string());
@@ -665,15 +678,27 @@ fn handle_install(state: &AppState, args: InstallArgs) -> Result<()> {
     })?;
 
     if state.ctx.dry_run {
-        println!(
-            "[dry-run] would install scaffolds and tooling for `{}`",
-            language
-        );
+        if args.no_scaffold {
+            println!(
+                "[dry-run] would install tooling and provisioning commands for `{}` without scaffolds",
+                language
+            );
+        } else {
+            println!(
+                "[dry-run] would install scaffolds and tooling for `{}`",
+                language
+            );
+        }
         return Ok(());
     }
 
-    println!("Installing scaffolds for `{}`...", language);
-    scaffold::install(&language, args.force)?;
+    if args.no_scaffold {
+        println!("Installing tooling for `{}` without scaffolds...", language);
+        scaffold::install_tools(&language)?;
+    } else {
+        println!("Installing scaffolds for `{}`...", language);
+        scaffold::install(&language, args.force)?;
+    }
 
     match install_commands(&state.config, &language) {
         Some(commands) if !commands.is_empty() => {
@@ -728,12 +753,16 @@ fn handle_env(state: &AppState, args: EnvArgs) -> Result<()> {
 fn handle_vault(state: &AppState, command: VaultCommand) -> Result<()> {
     match command {
         VaultCommand::List { account } => vault::list_items(&account, state.ctx.dry_run),
-        VaultCommand::Get { item, field, account } => {
-            vault::get_item(&account, &item, field.as_deref(), state.ctx.dry_run)
-        }
-        VaultCommand::Set { item, value, account } => {
-            vault::set_item(&account, &item, &value, state.ctx.dry_run)
-        }
+        VaultCommand::Get {
+            item,
+            field,
+            account,
+        } => vault::get_item(&account, &item, field.as_deref(), state.ctx.dry_run),
+        VaultCommand::Set {
+            item,
+            value,
+            account,
+        } => vault::set_item(&account, &item, &value, state.ctx.dry_run),
         VaultCommand::Delete { item, account } => {
             vault::delete_item(&account, &item, state.ctx.dry_run)
         }
@@ -747,7 +776,11 @@ fn handle_os(state: &AppState, command: OsCommand) -> Result<()> {
         OsCommand::Show => {
             let current_os = std::env::consts::OS;
             println!("Detected OS: {}", current_os);
-            println!("Config path: {} ({})", config_path, state.config_source.as_str());
+            println!(
+                "Config path: {} ({})",
+                config_path,
+                state.config_source.as_str()
+            );
 
             let config_dir = config_path
                 .parent()
@@ -759,22 +792,26 @@ fn handle_os(state: &AppState, command: OsCommand) -> Result<()> {
             println!(
                 "Linux config:   {} ({})",
                 linux_path,
-                if linux_path.exists() { "exists" } else { "not found" }
+                if linux_path.exists() {
+                    "exists"
+                } else {
+                    "not found"
+                }
             );
             println!(
                 "Windows config: {} ({})",
                 windows_path,
-                if windows_path.exists() { "exists" } else { "not found" }
+                if windows_path.exists() {
+                    "exists"
+                } else {
+                    "not found"
+                }
             );
 
             Ok(())
         }
-        OsCommand::Linux => {
-            os_switch(state, "linux")
-        }
-        OsCommand::Windows => {
-            os_switch(state, "windows")
-        }
+        OsCommand::Linux => os_switch(state, "linux"),
+        OsCommand::Windows => os_switch(state, "windows"),
     }
 }
 
@@ -783,14 +820,18 @@ fn os_switch(state: &AppState, target_os: &str) -> Result<()> {
     let content = crate::templates::get_string(&template_path)
         .with_context(|| format!("loading embedded template for {}", target_os))?;
 
-    let config_dir = state.config_path
+    let config_dir = state
+        .config_path
         .parent()
         .ok_or_else(|| anyhow!("cannot determine config directory"))?;
 
     let platform_config = config_dir.join(format!("config.{}.toml", target_os));
 
     if state.ctx.dry_run {
-        println!("[dry-run] would write {} config to {}", target_os, platform_config);
+        println!(
+            "[dry-run] would write {} config to {}",
+            target_os, platform_config
+        );
         return Ok(());
     }
 
@@ -801,7 +842,10 @@ fn os_switch(state: &AppState, target_os: &str) -> Result<()> {
         .with_context(|| format!("writing {}", platform_config))?;
 
     println!("Wrote {} config to {}", target_os, platform_config);
-    println!("This config will be preferred when running on {}.", target_os);
+    println!(
+        "This config will be preferred when running on {}.",
+        target_os
+    );
 
     Ok(())
 }
@@ -920,7 +964,10 @@ fn env_switch(state: &AppState, profile: &str) -> Result<()> {
     fs::copy(profile_path.as_std_path(), env_path.as_std_path())
         .with_context(|| format!("copying {} to {}", profile_path, env_path))?;
 
-    println!("Switched to profile `{}` (copied {} to {})", profile, profile_path, env_path);
+    println!(
+        "Switched to profile `{}` (copied {} to {})",
+        profile, profile_path, env_path
+    );
     Ok(())
 }
 
@@ -938,7 +985,10 @@ fn env_save(state: &AppState, name: &str) -> Result<()> {
     fs::copy(env_path.as_std_path(), profile_path.as_std_path())
         .with_context(|| format!("copying {} to {}", env_path, profile_path))?;
 
-    println!("Saved current .env as profile `{}` at {}", name, profile_path);
+    println!(
+        "Saved current .env as profile `{}` at {}",
+        name, profile_path
+    );
     Ok(())
 }
 
@@ -959,7 +1009,11 @@ fn env_check(state: &AppState) -> Result<()> {
             if !entries.contains(key.as_str()) {
                 missing_required.push(key);
             } else {
-                let value = env.entries().find(|(k, _)| k == key).map(|(_, v)| v).unwrap_or("");
+                let value = env
+                    .entries()
+                    .find(|(k, _)| k == key)
+                    .map(|(_, v)| v)
+                    .unwrap_or("");
                 if value.is_empty() {
                     empty_required.push(key);
                 }
@@ -1074,7 +1128,8 @@ fn env_diff(state: &AppState, reference: &str) -> Result<()> {
     }
 
     let ref_env = envfile::EnvFile::load(&ref_path)?;
-    let ref_keys: std::collections::HashSet<_> = ref_env.entries().map(|(k, _)| k.to_owned()).collect();
+    let ref_keys: std::collections::HashSet<_> =
+        ref_env.entries().map(|(k, _)| k.to_owned()).collect();
 
     let missing: Vec<_> = ref_keys.difference(&env_keys).collect();
     let extra: Vec<_> = env_keys.difference(&ref_keys).collect();
@@ -1118,20 +1173,32 @@ fn env_sync(state: &AppState, reference: &str) -> Result<()> {
     }
 
     let ref_env = envfile::EnvFile::load(&ref_path)?;
-    let ref_keys: std::collections::HashSet<_> = ref_env.entries().map(|(k, _)| k.to_owned()).collect();
+    let ref_keys: std::collections::HashSet<_> =
+        ref_env.entries().map(|(k, _)| k.to_owned()).collect();
 
     let missing: Vec<_> = ref_keys.difference(&env_keys).cloned().collect();
 
     if missing.is_empty() {
-        println!("No missing keys. {} is in sync with {}.", env_path, ref_path);
+        println!(
+            "No missing keys. {} is in sync with {}.",
+            env_path, ref_path
+        );
         return Ok(());
     }
 
     println!("Adding {} missing keys from {}:", missing.len(), reference);
     for key in &missing {
-        let value = ref_env.entries().find(|(k, _)| k == key).map(|(_, v)| v).unwrap_or("");
+        let value = ref_env
+            .entries()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v)
+            .unwrap_or("");
         env.upsert(key, value);
-        println!("  + {}={}", key, if value.is_empty() { "(empty)" } else { "*****" });
+        println!(
+            "  + {}={}",
+            key,
+            if value.is_empty() { "(empty)" } else { "*****" }
+        );
     }
 
     env.save()?;
@@ -1144,7 +1211,11 @@ fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Resul
     let config_path = resolved.path;
     match command {
         Some(ConfigCommand::Path) => {
-            println!("Config path: {} ({})", config_path, resolved.source.as_str());
+            println!(
+                "Config path: {} ({})",
+                config_path,
+                resolved.source.as_str()
+            );
             Ok(())
         }
         None | Some(ConfigCommand::Show) => {
@@ -1155,7 +1226,11 @@ fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Resul
             }
 
             let config = config::load_from_path(&config_path)?;
-            println!("Config path: {} ({})", config_path, resolved.source.as_str());
+            println!(
+                "Config path: {} ({})",
+                config_path,
+                resolved.source.as_str()
+            );
             println!("{}", config::format_summary(&config));
             Ok(())
         }
@@ -1186,7 +1261,11 @@ fn handle_config_only(ctx: &CliContext, command: Option<ConfigCommand>) -> Resul
                 return Ok(());
             }
             let config = config::load_from_path(&config_path)?;
-            println!("Reloaded config from {} ({})", config_path, resolved.source.as_str());
+            println!(
+                "Reloaded config from {} ({})",
+                config_path,
+                resolved.source.as_str()
+            );
             println!("{}", config::format_summary(&config));
             Ok(())
         }
@@ -1446,7 +1525,10 @@ language = 'typescript'
             std::env::current_dir().unwrap(),
             proj_dir.as_std_path().to_path_buf()
         );
-        assert_eq!(state.effective_language(None).as_deref(), Some("typescript"));
+        assert_eq!(
+            state.effective_language(None).as_deref(),
+            Some("typescript")
+        );
 
         std::env::set_current_dir(old).unwrap();
         let _ = fs::remove_dir_all(root.as_std_path());
@@ -1458,6 +1540,841 @@ fn run_task_sequence(state: &AppState, tasks: &[String]) -> Result<()> {
         handle_run(state, task)?;
     }
     Ok(())
+}
+
+#[derive(Debug)]
+struct AgentLaunch {
+    argv: Vec<String>,
+    cwd: PathBuf,
+    prompt: String,
+    model: Option<String>,
+    prompt_stdin: bool,
+    iterations: u32,
+}
+
+fn handle_agent(state: &AppState, command: AgentCommand) -> Result<()> {
+    match command {
+        AgentCommand::Run(args) => handle_agent_run(state, args),
+        AgentCommand::List => handle_agent_list(),
+        AgentCommand::Status(args) => handle_agent_status(&args.job_id, args.tail),
+    }
+}
+
+fn handle_agent_run(state: &AppState, args: crate::cli::AgentRunArgs) -> Result<()> {
+    let agent_name = if args.agent == "default" {
+        state
+            .config
+            .default_agent
+            .clone()
+            .unwrap_or_else(|| args.agent.clone())
+    } else {
+        args.agent.clone()
+    };
+
+    let agents = state
+        .config
+        .agents
+        .as_ref()
+        .ok_or_else(|| anyhow!("no agents configured; add an [agents.{agent_name}] table"))?;
+    let agent = agents
+        .get(&agent_name)
+        .with_context(|| format!("unknown agent `{}`", agent_name))?;
+
+    let prompt = read_agent_prompt(args.prompt.as_deref(), args.prompt_file.as_ref())?;
+    if prompt.trim().is_empty() {
+        bail!("agent prompt cannot be empty");
+    }
+
+    let cwd = resolve_agent_cwd(agent.cwd.as_deref(), args.cwd.as_ref())?;
+    let model = args.model.or_else(|| agent.model.clone());
+    let launch = build_agent_launch(
+        agent,
+        &cwd,
+        model,
+        prompt,
+        &args.extra_args,
+        args.iterations,
+    )?;
+
+    println!(
+        "Launching agent `{}`: {}",
+        agent_name,
+        format_command(&launch.argv)
+    );
+    println!("  cwd: {}", launch.cwd.display());
+    if let Some(model) = &launch.model {
+        println!("  model: {}", model);
+    }
+    if launch.iterations > 1 {
+        println!("  iterations: {}", launch.iterations);
+    }
+
+    if state.ctx.dry_run {
+        println!("    (dry-run) skipped");
+        return Ok(());
+    }
+
+    if args.attach {
+        launch_agent_foreground(launch)
+    } else {
+        launch_agent_detached(&agent_name, launch)
+    }
+}
+
+#[derive(Debug)]
+struct AgentJobRecord {
+    id: String,
+    agent: String,
+    pid: u32,
+    log_path: PathBuf,
+    command: String,
+    model: Option<String>,
+    cwd: PathBuf,
+    iterations: u32,
+    started_at: u64,
+}
+
+fn handle_agent_list() -> Result<()> {
+    let dir = agent_jobs_dir()?;
+    if !dir.exists() {
+        println!("No agent jobs found.");
+        return Ok(());
+    }
+
+    let mut jobs = Vec::new();
+    for entry in fs::read_dir(&dir).with_context(|| format!("reading {}", dir.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("job") {
+            continue;
+        }
+        if let Ok(record) = read_agent_job(&path) {
+            jobs.push(record);
+        }
+    }
+
+    jobs.sort_by_key(|job| job.started_at);
+    if jobs.is_empty() {
+        println!("No agent jobs found.");
+        return Ok(());
+    }
+
+    for job in jobs {
+        let state = if process_is_running(job.pid) {
+            "running"
+        } else {
+            "exited"
+        };
+        println!(
+            "{}  {}  pid={}  agent={}  model={}  log={}",
+            job.id,
+            state,
+            job.pid,
+            job.agent,
+            job.model.as_deref().unwrap_or("<none>"),
+            job.log_path.display()
+        );
+    }
+    Ok(())
+}
+
+fn handle_agent_status(job_id: &str, tail: usize) -> Result<()> {
+    let path = agent_jobs_dir()?.join(format!("{}.job", job_id));
+    let job = read_agent_job(&path).with_context(|| format!("reading job `{}`", job_id))?;
+    let running = process_is_running(job.pid);
+    println!("Job: {}", job.id);
+    println!("Agent: {}", job.agent);
+    println!("State: {}", if running { "running" } else { "exited" });
+    println!("PID: {}", job.pid);
+    println!("Model: {}", job.model.as_deref().unwrap_or("<none>"));
+    println!("CWD: {}", job.cwd.display());
+    println!("Iterations: {}", job.iterations);
+    println!("Command: {}", job.command);
+    println!("Log: {}", job.log_path.display());
+
+    let log = fs::read_to_string(&job.log_path).unwrap_or_default();
+    if log.trim().is_empty() {
+        println!("Summary\n- log is empty");
+        return Ok(());
+    }
+    let lines = log.lines().rev().take(tail).collect::<Vec<_>>();
+    println!("Summary");
+    for line in lines.into_iter().rev() {
+        let lowered = line.to_ascii_lowercase();
+        if lowered.contains("error")
+            || lowered.contains("failed")
+            || lowered.contains("complete")
+            || lowered.contains("done")
+            || lowered.contains("iteration")
+            || lowered.contains("summary")
+        {
+            println!("- {}", line);
+        }
+    }
+    println!("Tail");
+    for line in log
+        .lines()
+        .rev()
+        .take(tail)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+    {
+        println!("{}", line);
+    }
+    Ok(())
+}
+
+fn read_agent_prompt(prompt: Option<&str>, prompt_file: Option<&PathBuf>) -> Result<String> {
+    match (prompt, prompt_file) {
+        (Some(_), Some(_)) => bail!("use either --prompt or --prompt-file, not both"),
+        (Some(value), None) => Ok(value.to_owned()),
+        (None, Some(path)) if path == Path::new("-") => {
+            let mut input = String::new();
+            std::io::Read::read_to_string(&mut io::stdin(), &mut input)
+                .context("reading prompt from stdin")?;
+            Ok(input)
+        }
+        (None, Some(path)) => {
+            fs::read_to_string(path).with_context(|| format!("reading prompt {}", path.display()))
+        }
+        (None, None) => bail!("provide --prompt or --prompt-file"),
+    }
+}
+
+fn resolve_agent_cwd(configured: Option<&str>, override_cwd: Option<&PathBuf>) -> Result<PathBuf> {
+    let cwd = if let Some(path) = override_cwd {
+        path.clone()
+    } else if let Some(path) = configured {
+        PathBuf::from(path)
+    } else {
+        std::env::current_dir().context("determining current directory")?
+    };
+
+    if cwd.is_absolute() {
+        Ok(cwd)
+    } else {
+        Ok(std::env::current_dir()
+            .context("determining current directory")?
+            .join(cwd))
+    }
+}
+
+fn build_agent_launch(
+    agent: &crate::config::AgentConfig,
+    cwd: &Path,
+    model: Option<String>,
+    prompt: String,
+    extra_args: &[String],
+    iteration_override: Option<u32>,
+) -> Result<AgentLaunch> {
+    let prompt = match agent.prompt_prefix.as_deref() {
+        Some(prefix) if !prefix.trim().is_empty() => format!("{}\n\n{}", prefix, prompt),
+        _ => prompt,
+    };
+    let mut adapter_args = agent.extra_args.clone().unwrap_or_default();
+    adapter_args.extend(extra_args.iter().cloned());
+    let adapter = agent.adapter.as_deref().unwrap_or("codex");
+    let iterations = iteration_override.or(agent.iterations).unwrap_or(1);
+    if iterations == 0 {
+        bail!("agent iterations must be greater than zero");
+    }
+
+    let argv = match adapter {
+        "codex" => {
+            let mut argv = vec!["codex".to_owned(), "exec".to_owned()];
+            if let Some(model) = &model {
+                argv.push("--model".to_owned());
+                argv.push(model.clone());
+            }
+            argv.push("--cd".to_owned());
+            argv.push(cwd.display().to_string());
+            argv.extend(adapter_args);
+            argv.push(prompt.clone());
+            argv
+        }
+        "command" | "generic" | "loop" => {
+            let command = agent
+                .command
+                .clone()
+                .ok_or_else(|| anyhow!("{} agent adapter requires `command`", adapter))?;
+            if command.is_empty() {
+                bail!("{} agent command cannot be empty", adapter);
+            }
+            let mut argv = command;
+            argv.extend(adapter_args);
+            argv
+        }
+        other => bail!("unsupported agent adapter `{}`", other),
+    };
+
+    Ok(AgentLaunch {
+        argv,
+        cwd: cwd.to_path_buf(),
+        prompt,
+        model,
+        prompt_stdin: matches!(adapter, "command" | "generic" | "loop"),
+        iterations: if adapter == "loop" { iterations } else { 1 },
+    })
+}
+
+fn launch_agent_foreground(launch: AgentLaunch) -> Result<()> {
+    for iteration in 1..=launch.iterations {
+        if launch.iterations > 1 {
+            println!(
+                "[{}/{}] {}",
+                iteration,
+                launch.iterations,
+                format_command(&launch.argv)
+            );
+        }
+        launch_agent_foreground_once(&launch, iteration)?;
+    }
+    Ok(())
+}
+
+fn launch_agent_foreground_once(launch: &AgentLaunch, iteration: u32) -> Result<()> {
+    let mut command = ProcessCommand::new(&launch.argv[0]);
+    command.args(&launch.argv[1..]);
+    command.current_dir(&launch.cwd);
+    command.env("DEV_AGENT_PROMPT", &launch.prompt);
+    command.env("DEV_AGENT_CWD", &launch.cwd);
+    command.env("DEV_AGENT_ITERATION", iteration.to_string());
+    command.env("DEV_AGENT_ITERATIONS", launch.iterations.to_string());
+    if let Some(model) = &launch.model {
+        command.env("DEV_AGENT_MODEL", model);
+    }
+    if launch.prompt_stdin {
+        command.stdin(Stdio::piped());
+    } else {
+        command.stdin(Stdio::inherit());
+    }
+    command.stdout(Stdio::inherit());
+    command.stderr(Stdio::inherit());
+
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("launching agent `{}`", format_command(&launch.argv)))?;
+    if launch.prompt_stdin
+        && let Some(mut stdin) = child.stdin.take()
+    {
+        stdin
+            .write_all(launch.prompt.as_bytes())
+            .context("writing prompt to agent stdin")?;
+    }
+
+    let status = child.wait().context("waiting for agent")?;
+    if status.success() {
+        Ok(())
+    } else {
+        bail!(
+            "agent iteration {}/{} exited with code {:?}",
+            iteration,
+            launch.iterations,
+            status.code()
+        )
+    }
+}
+
+fn launch_agent_detached(agent_name: &str, launch: AgentLaunch) -> Result<()> {
+    if launch.iterations > 1 {
+        println!("Async loop iterations: {}", launch.iterations);
+    }
+    let started_at = unix_timestamp()?;
+    let job_id = format!("{}-{}", started_at, safe_agent_name(agent_name));
+    let log_path = agent_log_path(&job_id)?;
+    let stdout = fs::File::create(&log_path)
+        .with_context(|| format!("creating agent log {}", log_path.display()))?;
+    let stderr = stdout
+        .try_clone()
+        .with_context(|| format!("cloning agent log {}", log_path.display()))?;
+
+    let mut command = ProcessCommand::new(&launch.argv[0]);
+    command.args(&launch.argv[1..]);
+    command.current_dir(&launch.cwd);
+    command.env("DEV_AGENT_PROMPT", &launch.prompt);
+    command.env("DEV_AGENT_CWD", &launch.cwd);
+    command.env("DEV_AGENT_ITERATIONS", launch.iterations.to_string());
+    if let Some(model) = &launch.model {
+        command.env("DEV_AGENT_MODEL", model);
+    }
+    if launch.iterations > 1 {
+        let loop_script = detached_loop_script(&launch.argv, launch.iterations);
+        command = ProcessCommand::new("bash");
+        command.arg("-lc").arg(loop_script);
+        command.current_dir(&launch.cwd);
+        command.env("DEV_AGENT_PROMPT", &launch.prompt);
+        command.env("DEV_AGENT_CWD", &launch.cwd);
+        command.env("DEV_AGENT_ITERATIONS", launch.iterations.to_string());
+        if let Some(model) = &launch.model {
+            command.env("DEV_AGENT_MODEL", model);
+        }
+    }
+    if launch.prompt_stdin {
+        command.stdin(Stdio::piped());
+    } else {
+        command.stdin(Stdio::null());
+    }
+    command.stdout(Stdio::from(stdout));
+    command.stderr(Stdio::from(stderr));
+
+    let mut child = command.spawn().with_context(|| {
+        format!(
+            "launching detached agent `{}`",
+            format_command(&launch.argv)
+        )
+    })?;
+    if launch.prompt_stdin
+        && launch.iterations == 1
+        && let Some(mut stdin) = child.stdin.take()
+    {
+        stdin
+            .write_all(launch.prompt.as_bytes())
+            .context("writing prompt to detached agent stdin")?;
+    }
+    let record = AgentJobRecord {
+        id: job_id,
+        agent: agent_name.to_owned(),
+        pid: child.id(),
+        log_path: log_path.clone(),
+        command: format_command(&launch.argv),
+        model: launch.model.clone(),
+        cwd: launch.cwd.clone(),
+        iterations: launch.iterations,
+        started_at,
+    };
+    write_agent_job(&record)?;
+    println!("Agent job: {}", record.id);
+    println!("PID: {}", child.id());
+    println!("Log: {}", log_path.display());
+    println!("Check later: dev agent status {}", record.id);
+    Ok(())
+}
+
+fn detached_loop_script(argv: &[String], iterations: u32) -> String {
+    let command = shell_command(argv);
+    let display = shell_single_quote(&format_command(argv));
+    format!(
+        "for i in $(seq 1 {iterations}); do printf '[iteration %s/{iterations}] %s\\n' \"$i\" {display}; printf '%s' \"$DEV_AGENT_PROMPT\" | DEV_AGENT_ITERATION=\"$i\" {command}; status=$?; if [ $status -ne 0 ]; then exit $status; fi; done",
+    )
+}
+
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn agent_log_path(job_id: &str) -> Result<PathBuf> {
+    let home = dirs::home_dir().context("determining home directory")?;
+    let dir = home.join(".dev").join("agents");
+    fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    Ok(dir.join(format!("{}.log", job_id)))
+}
+
+fn agent_jobs_dir() -> Result<PathBuf> {
+    let home = dirs::home_dir().context("determining home directory")?;
+    let dir = home.join(".dev").join("agents").join("jobs");
+    fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    Ok(dir)
+}
+
+fn unix_timestamp() -> Result<u64> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock before unix epoch")?
+        .as_secs())
+}
+
+fn safe_agent_name(agent_name: &str) -> String {
+    agent_name
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+}
+
+fn write_agent_job(record: &AgentJobRecord) -> Result<()> {
+    let path = agent_jobs_dir()?.join(format!("{}.job", record.id));
+    let mut out = String::new();
+    out.push_str(&format!("id={}\n", record.id));
+    out.push_str(&format!("agent={}\n", record.agent));
+    out.push_str(&format!("pid={}\n", record.pid));
+    out.push_str(&format!("log_path={}\n", record.log_path.display()));
+    out.push_str(&format!(
+        "command={}\n",
+        record.command.replace('\n', "\\n")
+    ));
+    out.push_str(&format!(
+        "model={}\n",
+        record.model.as_deref().unwrap_or("")
+    ));
+    out.push_str(&format!("cwd={}\n", record.cwd.display()));
+    out.push_str(&format!("iterations={}\n", record.iterations));
+    out.push_str(&format!("started_at={}\n", record.started_at));
+    fs::write(&path, out).with_context(|| format!("writing {}", path.display()))
+}
+
+fn read_agent_job(path: &Path) -> Result<AgentJobRecord> {
+    let raw = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let mut values = std::collections::BTreeMap::new();
+    for line in raw.lines() {
+        if let Some((key, value)) = line.split_once('=') {
+            values.insert(key.to_owned(), value.to_owned());
+        }
+    }
+    let get = |key: &str| {
+        values
+            .get(key)
+            .cloned()
+            .ok_or_else(|| anyhow!("job file missing `{}`", key))
+    };
+    let model = get("model")?;
+    Ok(AgentJobRecord {
+        id: get("id")?,
+        agent: get("agent")?,
+        pid: get("pid")?.parse().context("parsing job pid")?,
+        log_path: PathBuf::from(get("log_path")?),
+        command: get("command")?.replace("\\n", "\n"),
+        model: if model.is_empty() { None } else { Some(model) },
+        cwd: PathBuf::from(get("cwd")?),
+        iterations: get("iterations")?.parse().context("parsing iterations")?,
+        started_at: get("started_at")?.parse().context("parsing started_at")?,
+    })
+}
+
+fn process_is_running(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    ProcessCommand::new("kill")
+        .arg("-0")
+        .arg(pid.to_string())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[derive(Debug)]
+struct CapturedCommandResult {
+    status: ExitStatus,
+    stdout: String,
+    stderr: String,
+    elapsed: std::time::Duration,
+}
+
+#[derive(Debug)]
+struct SummaryOptions {
+    shell: String,
+    max_output_bytes: usize,
+    tail_bytes: usize,
+    llm_command: Option<String>,
+}
+
+fn handle_summary(state: &AppState, command: SummaryCommand) -> Result<()> {
+    match command {
+        SummaryCommand::Run(args) => handle_summary_run(state, &args.task, args.raw),
+        SummaryCommand::Exec(args) => handle_summary_exec(state, &args.argv, args.raw),
+    }
+}
+
+fn handle_summary_run(state: &AppState, task: &str, raw: bool) -> Result<()> {
+    println!("Running summarized task `{}`", task);
+    let commands = state.tasks.flatten(task)?;
+    execute_commands_summarized(state, task, &commands, raw)
+}
+
+fn handle_summary_exec(state: &AppState, argv: &[String], raw: bool) -> Result<()> {
+    if argv.is_empty() {
+        bail!("summary exec requires a command after `--`");
+    }
+    let spec = CommandSpec {
+        origin: "exec".to_owned(),
+        argv: argv.to_owned(),
+        allow_fail: false,
+    };
+    execute_commands_summarized(state, "exec", &[spec], raw)
+}
+
+fn execute_commands_summarized(
+    state: &AppState,
+    task: &str,
+    commands: &[CommandSpec],
+    raw: bool,
+) -> Result<()> {
+    if commands.is_empty() {
+        println!("Task `{}` has no commands.", task);
+        return Ok(());
+    }
+
+    let options = summary_options(&state.config);
+    let total = commands.len();
+    for (idx, spec) in commands.iter().enumerate() {
+        let render = format_command(&spec.argv);
+        println!(
+            "[{}/{}] {} :: {} (shell: {})",
+            idx + 1,
+            total,
+            spec.origin,
+            render,
+            options.shell
+        );
+
+        if state.ctx.dry_run {
+            println!("    (dry-run) skipped");
+            continue;
+        }
+
+        let result = run_process_captured_in_shell(&spec.argv, &options.shell)?;
+        let combined = combine_output(&result.stdout, &result.stderr);
+        let summary = summarize_captured_output(&render, &result, &combined, &options)?;
+        println!("{}", summary);
+
+        if raw {
+            print_raw_output(&result.stdout, &result.stderr);
+        }
+
+        if result.status.success() {
+            println!("[ok] {} (completed in {:.2?})", render, result.elapsed);
+        } else if spec.allow_fail {
+            println!(
+                "[warn] {} failed with exit code {:?} (ignored)",
+                render,
+                result.status.code()
+            );
+        } else {
+            bail!(
+                "command `{}` failed with exit code {:?}",
+                render,
+                result.status.code()
+            );
+        }
+    }
+
+    if state.ctx.dry_run {
+        println!("Task `{}` simulated (dry-run).", task);
+    } else {
+        println!("Task `{}` completed.", task);
+    }
+
+    Ok(())
+}
+
+fn summary_options(config: &DevConfig) -> SummaryOptions {
+    let summary = config.summary.as_ref();
+    let shell = std::env::var("DEV_SUMMARY_SHELL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| summary.and_then(|s| s.shell.clone()))
+        .unwrap_or_else(|| "bash".to_owned());
+    let max_output_bytes = std::env::var("DEV_SUMMARY_MAX_OUTPUT_BYTES")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .or_else(|| summary.and_then(|s| s.max_output_bytes))
+        .unwrap_or(64 * 1024);
+    let tail_bytes = std::env::var("DEV_SUMMARY_TAIL_BYTES")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .or_else(|| summary.and_then(|s| s.tail_bytes))
+        .unwrap_or(12 * 1024);
+    let llm_command = std::env::var("DEV_SUMMARY_LLM_COMMAND")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| summary.and_then(|s| s.llm_command.clone()));
+
+    SummaryOptions {
+        shell,
+        max_output_bytes,
+        tail_bytes,
+        llm_command,
+    }
+}
+
+fn run_process_captured_in_shell(argv: &[String], shell: &str) -> Result<CapturedCommandResult> {
+    let script = shell_command(argv);
+    let start = Instant::now();
+    let output = ProcessCommand::new(shell)
+        .arg("-lc")
+        .arg(&script)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .with_context(|| format!("executing `{}` through shell `{}`", script, shell))?;
+
+    Ok(CapturedCommandResult {
+        status: output.status,
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        elapsed: start.elapsed(),
+    })
+}
+
+fn summarize_captured_output(
+    command: &str,
+    result: &CapturedCommandResult,
+    combined: &str,
+    options: &SummaryOptions,
+) -> Result<String> {
+    let bounded = bounded_output(combined, options.max_output_bytes, options.tail_bytes);
+    if let Some(llm_command) = &options.llm_command
+        && !bounded.trim().is_empty()
+    {
+        match summarize_with_llm_command(command, result, &bounded, llm_command) {
+            Ok(summary) if !summary.trim().is_empty() => return Ok(summary),
+            Ok(_) => {}
+            Err(err) => {
+                println!("[warn] LLM summary command failed: {err:#}");
+            }
+        }
+    }
+
+    Ok(local_summary(command, result, &bounded))
+}
+
+fn summarize_with_llm_command(
+    command: &str,
+    result: &CapturedCommandResult,
+    output: &str,
+    llm_command: &str,
+) -> Result<String> {
+    let prompt = format!(
+        "Summarize this developer command result for another coding agent.\n\
+         Be concise. Include the exit status, likely root cause, and next action.\n\
+         Do not reproduce long traces.\n\n\
+         Command: {command}\n\
+         Exit code: {:?}\n\
+         Duration: {:.2?}\n\n\
+         Captured output:\n{output}\n",
+        result.status.code(),
+        result.elapsed
+    );
+
+    let mut child = ProcessCommand::new("bash")
+        .arg("-lc")
+        .arg(llm_command)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("starting LLM summary command `{}`", llm_command))?;
+
+    if let Some(stdin) = child.stdin.as_mut() {
+        stdin
+            .write_all(prompt.as_bytes())
+            .context("writing prompt to LLM summary command")?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .context("waiting for LLM summary command")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!(
+            "LLM summary command exited with {:?}: {}",
+            output.status.code(),
+            stderr.trim()
+        );
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+fn local_summary(command: &str, result: &CapturedCommandResult, output: &str) -> String {
+    let mut lines = output.lines();
+    let interesting = output
+        .lines()
+        .filter(|line| {
+            let lowered = line.to_ascii_lowercase();
+            lowered.contains("error")
+                || lowered.contains("failed")
+                || lowered.contains("panic")
+                || lowered.contains("exception")
+                || lowered.contains("warning")
+                || lowered.contains("traceback")
+        })
+        .take(12)
+        .collect::<Vec<_>>();
+
+    let preview = if interesting.is_empty() {
+        lines.by_ref().rev().take(12).collect::<Vec<_>>()
+    } else {
+        interesting
+    };
+
+    let mut out = String::new();
+    out.push_str("Summary\n");
+    out.push_str(&format!("- command: {}\n", command));
+    out.push_str(&format!("- exit: {:?}\n", result.status.code()));
+    out.push_str(&format!("- duration: {:.2?}\n", result.elapsed));
+    if output.trim().is_empty() {
+        out.push_str("- output: <empty>\n");
+    } else {
+        out.push_str("- notable output:\n");
+        for line in preview {
+            out.push_str("  ");
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+fn bounded_output(output: &str, max_output_bytes: usize, tail_bytes: usize) -> String {
+    if output.len() <= max_output_bytes {
+        return output.to_owned();
+    }
+
+    let keep_head = max_output_bytes.saturating_sub(tail_bytes);
+    let head = clamp_to_char_boundary(output, keep_head);
+    let tail_start = output.len().saturating_sub(tail_bytes);
+    let tail_start = clamp_start_to_char_boundary(output, tail_start);
+    format!(
+        "{}\n\n[... omitted {} bytes ...]\n\n{}",
+        &output[..head],
+        output
+            .len()
+            .saturating_sub(head + (output.len() - tail_start)),
+        &output[tail_start..]
+    )
+}
+
+fn clamp_to_char_boundary(value: &str, mut index: usize) -> usize {
+    index = index.min(value.len());
+    while index > 0 && !value.is_char_boundary(index) {
+        index -= 1;
+    }
+    index
+}
+
+fn clamp_start_to_char_boundary(value: &str, mut index: usize) -> usize {
+    index = index.min(value.len());
+    while index < value.len() && !value.is_char_boundary(index) {
+        index += 1;
+    }
+    index
+}
+
+fn combine_output(stdout: &str, stderr: &str) -> String {
+    match (stdout.trim().is_empty(), stderr.trim().is_empty()) {
+        (true, true) => String::new(),
+        (false, true) => format!("stdout:\n{}", stdout),
+        (true, false) => format!("stderr:\n{}", stderr),
+        (false, false) => format!("stdout:\n{}\nstderr:\n{}", stdout, stderr),
+    }
+}
+
+fn print_raw_output(stdout: &str, stderr: &str) {
+    if !stdout.is_empty() {
+        println!("Raw stdout\n{}", stdout);
+    }
+    if !stderr.is_empty() {
+        println!("Raw stderr\n{}", stderr);
+    }
 }
 
 fn execute_commands(state: &AppState, task: &str, commands: &[CommandSpec]) -> Result<()> {
@@ -1522,6 +2439,23 @@ fn format_command(argv: &[String]) -> String {
                 format!("\"{}\"", escaped)
             } else {
                 arg.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn shell_command(argv: &[String]) -> String {
+    argv.iter()
+        .map(|arg| {
+            if arg.is_empty() {
+                "''".to_owned()
+            } else if arg.chars().all(|c| {
+                c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':' | '+')
+            }) {
+                arg.clone()
+            } else {
+                format!("'{}'", arg.replace('\'', "'\\''"))
             }
         })
         .collect::<Vec<_>>()
@@ -1615,10 +2549,7 @@ fn strip_compose_container_name(path: &Path) -> Result<bool> {
     Ok(true)
 }
 
-fn run_process_streaming_in_dir(
-    argv: &[String],
-    cwd: &Path,
-) -> Result<std::process::ExitStatus> {
+fn run_process_streaming_in_dir(argv: &[String], cwd: &Path) -> Result<std::process::ExitStatus> {
     let mut command = ProcessCommand::new(&argv[0]);
     if argv.len() > 1 {
         command.args(&argv[1..]);
@@ -1726,50 +2657,55 @@ impl CliContext {
             });
         }
 
-        if let Ok(cwd) = std::env::current_dir() {
-            if let Ok(mut dir) = Utf8PathBuf::from_path_buf(cwd) {
-                loop {
-                    let platform_suffix = platform_config_suffix();
+        if let Ok(cwd) = std::env::current_dir()
+            && let Ok(mut dir) = Utf8PathBuf::from_path_buf(cwd)
+        {
+            loop {
+                let platform_suffix = platform_config_suffix();
 
-                    // .dev/ path — platform-specific first, then generic
-                    let platform_preferred = dir.join(".dev").join(format!("config.{}.toml", platform_suffix));
-                    if platform_preferred.exists() {
-                        return Ok(ResolvedConfigPath {
-                            path: platform_preferred,
-                            source: ConfigPathSource::Discovered,
-                        });
-                    }
-
-                    let preferred = dir.join(".dev").join("config.toml");
-                    if preferred.exists() {
-                        return Ok(ResolvedConfigPath {
-                            path: preferred,
-                            source: ConfigPathSource::Discovered,
-                        });
-                    }
-
-                    // Legacy tools/dev/ path — same priority
-                    let legacy_platform = dir.join("tools").join("dev").join(format!("config.{}.toml", platform_suffix));
-                    if legacy_platform.exists() {
-                        return Ok(ResolvedConfigPath {
-                            path: legacy_platform,
-                            source: ConfigPathSource::Discovered,
-                        });
-                    }
-
-                    let legacy = dir.join("tools").join("dev").join("config.toml");
-                    if legacy.exists() {
-                        return Ok(ResolvedConfigPath {
-                            path: legacy,
-                            source: ConfigPathSource::Discovered,
-                        });
-                    }
-
-                    let Some(parent) = dir.parent() else {
-                        break;
-                    };
-                    dir = parent.to_path_buf();
+                // .dev/ path — platform-specific first, then generic
+                let platform_preferred = dir
+                    .join(".dev")
+                    .join(format!("config.{}.toml", platform_suffix));
+                if platform_preferred.exists() {
+                    return Ok(ResolvedConfigPath {
+                        path: platform_preferred,
+                        source: ConfigPathSource::Discovered,
+                    });
                 }
+
+                let preferred = dir.join(".dev").join("config.toml");
+                if preferred.exists() {
+                    return Ok(ResolvedConfigPath {
+                        path: preferred,
+                        source: ConfigPathSource::Discovered,
+                    });
+                }
+
+                // Legacy tools/dev/ path — same priority
+                let legacy_platform = dir
+                    .join("tools")
+                    .join("dev")
+                    .join(format!("config.{}.toml", platform_suffix));
+                if legacy_platform.exists() {
+                    return Ok(ResolvedConfigPath {
+                        path: legacy_platform,
+                        source: ConfigPathSource::Discovered,
+                    });
+                }
+
+                let legacy = dir.join("tools").join("dev").join("config.toml");
+                if legacy.exists() {
+                    return Ok(ResolvedConfigPath {
+                        path: legacy,
+                        source: ConfigPathSource::Discovered,
+                    });
+                }
+
+                let Some(parent) = dir.parent() else {
+                    break;
+                };
+                dir = parent.to_path_buf();
             }
         }
 
@@ -1843,10 +2779,9 @@ impl AppState {
         let mut project_language: Option<String> = None;
 
         if let Some(project) = requested_project.as_deref() {
-            let projects = config
-                .projects
-                .as_ref()
-                .with_context(|| format!("project `{}` requested but no projects configured", project))?;
+            let projects = config.projects.as_ref().with_context(|| {
+                format!("project `{}` requested but no projects configured", project)
+            })?;
             let spec = projects
                 .get(project)
                 .with_context(|| format!("unknown project `{}`", project))?;
@@ -1882,8 +2817,11 @@ impl AppState {
     }
 
     fn effective_language(&self, override_lang: Option<String>) -> Option<String> {
-        self.ctx
-            .effective_language(&self.config, self.project_language.as_deref(), override_lang)
+        self.ctx.effective_language(
+            &self.config,
+            self.project_language.as_deref(),
+            override_lang,
+        )
     }
 
     fn env_path(&self) -> Result<Utf8PathBuf> {
@@ -1905,37 +2843,35 @@ fn handle_language_set(ctx: &CliContext, name: String) -> Result<()> {
     Ok(())
 }
 
-fn handle_walk(
-    ctx: &CliContext,
-    directory: PathBuf,
-    output: PathBuf,
-    _format: String,
-    max_depth: u32,
-    no_content: bool,
-    extensions: Option<Vec<String>>,
-    include_hidden: bool,
-) -> Result<()> {
+fn handle_walk(ctx: &CliContext, request: WalkRequest) -> Result<()> {
     use crate::walk::{WalkOptions, generate_manifest};
 
     if ctx.dry_run {
-        println!("[dry-run] Generate manifest for {} -> {}", directory.display(), output.display());
+        println!(
+            "[dry-run] Generate manifest for {} -> {}",
+            request.directory.display(),
+            request.output.display()
+        );
         return Ok(());
     }
 
     let opts = WalkOptions {
-        max_depth: max_depth as usize,
-        include_content: !no_content,
-        extensions,
-        ignore_hidden: !include_hidden,
+        max_depth: request.max_depth as usize,
+        include_content: !request.no_content,
+        extensions: request.extensions,
+        ignore_hidden: !request.include_hidden,
     };
 
     println!("Generating directory manifest...");
-    let manifest = generate_manifest(&directory, opts)?;
-    
-    std::fs::write(&output, manifest)?;
-    
-    println!("Directory map generated successfully: {}", output.display());
-    
+    let manifest = generate_manifest(&request.directory, opts)?;
+
+    std::fs::write(&request.output, manifest)?;
+
+    println!(
+        "Directory map generated successfully: {}",
+        request.output.display()
+    );
+
     Ok(())
 }
 
@@ -1948,7 +2884,8 @@ fn handle_review(
     use crate::review::{ReviewOptions, generate_review, get_repo_root};
 
     if ctx.dry_run {
-        let output_path = output.as_ref()
+        let output_path = output
+            .as_ref()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| "diff.md".to_string());
         println!("[dry-run] Generate review report -> {}", output_path);
@@ -1961,27 +2898,30 @@ fn handle_review(
     };
 
     let repo_root = get_repo_root()?;
-    
+
     println!("Generating code review report...");
     let report = generate_review(opts, &repo_root)?;
-    
+
     let output_path = output.unwrap_or_else(|| PathBuf::from("diff.md"));
-    
+
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    
+
     std::fs::write(&output_path, report)?;
-    
-    println!("Review report generated successfully: {}", output_path.display());
-    
+
+    println!(
+        "Review report generated successfully: {}",
+        output_path.display()
+    );
+
     Ok(())
 }
 
 fn handle_setup(
     ctx: &CliContext,
     command: Option<SetupCommand>,
-    root_skip_installed: bool,
+    _root_skip_installed: bool,
     root_no_deps: bool,
 ) -> Result<()> {
     use crate::setup::{Component, SetupConfig, SetupContext};
@@ -1989,7 +2929,7 @@ fn handle_setup(
     // Create log file path
     let home = dirs::home_dir().context("Could not determine home directory")?;
     let log_file = home.join(".dev").join("setup.log");
-    
+
     // Ensure .dev directory exists
     if let Some(parent) = log_file.parent() {
         std::fs::create_dir_all(parent)?;
@@ -1997,7 +2937,7 @@ fn handle_setup(
 
     // Create setup context
     let setup_config = SetupConfig::default();
-    let setup_ctx = SetupContext::new(ctx.dry_run, Some(log_file.into()), setup_config)?;
+    let setup_ctx = SetupContext::new(ctx.dry_run, Some(log_file), setup_config)?;
 
     match command {
         None => {
@@ -2008,11 +2948,9 @@ fn handle_setup(
                 .iter()
                 .map(|name| Component::from_str(name))
                 .collect();
-            
+
             let components = components?;
-            // Default to skip_installed=true unless explicitly set to false via root flag
-            let skip = if root_skip_installed { true } else { true };
-            crate::setup::run_setup(&setup_ctx, components, skip, root_no_deps)?;
+            crate::setup::run_setup(&setup_ctx, components, true, root_no_deps)?;
         }
         Some(SetupCommand::Run {
             components: component_names,
@@ -2023,7 +2961,7 @@ fn handle_setup(
                 .iter()
                 .map(|name| Component::from_str(name))
                 .collect();
-            
+
             let components = components?;
             // Subcommand flags take precedence over root flags
             crate::setup::run_setup(&setup_ctx, components, skip_installed, no_deps)?;
@@ -2035,10 +2973,7 @@ fn handle_setup(
             no_cache,
         }) => {
             let home = dirs::home_dir().context("Could not determine home directory")?;
-            let default_dest = home
-                .join("repos")
-                .join("inference")
-                .join(service.trim());
+            let default_dest = home.join("repos").join("inference").join(service.trim());
             let dest = dest.unwrap_or(default_dest);
 
             let service = service.trim();
@@ -2056,14 +2991,17 @@ fn handle_setup(
                 if no_cache {
                     argv.push("--no-cache".to_owned());
                 }
-                println!("[dry-run] run: {} (cwd: {})", format_command(&argv), dest.display());
+                println!(
+                    "[dry-run] run: {} (cwd: {})",
+                    format_command(&argv),
+                    dest.display()
+                );
                 return Ok(());
             }
 
             if let Some(parent) = dest.parent() {
-                std::fs::create_dir_all(parent).with_context(|| {
-                    format!("creating parent directory {}", parent.display())
-                })?;
+                std::fs::create_dir_all(parent)
+                    .with_context(|| format!("creating parent directory {}", parent.display()))?;
             }
 
             if dest.exists() {
@@ -2090,9 +3028,8 @@ fn handle_setup(
                         "[warn] removing existing destination {} (--force)",
                         dest.display()
                     );
-                    std::fs::remove_dir_all(&dest).with_context(|| {
-                        format!("removing {}", dest.display())
-                    })?;
+                    std::fs::remove_dir_all(&dest)
+                        .with_context(|| format!("removing {}", dest.display()))?;
 
                     let argv = vec![
                         "git".to_owned(),

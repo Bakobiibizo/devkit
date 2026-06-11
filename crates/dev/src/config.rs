@@ -20,6 +20,9 @@ pub struct DevConfig {
     pub languages: Option<BTreeMap<String, Language>>,
     pub git: Option<GitConfig>,
     pub env: Option<EnvConfig>,
+    pub summary: Option<SummaryConfig>,
+    pub default_agent: Option<String>,
+    pub agents: Option<BTreeMap<String, AgentConfig>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -144,6 +147,25 @@ pub struct GitConfig {
 pub struct EnvConfig {
     pub required: Option<Vec<String>>,
     pub optional: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SummaryConfig {
+    pub shell: Option<String>,
+    pub max_output_bytes: Option<usize>,
+    pub tail_bytes: Option<usize>,
+    pub llm_command: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AgentConfig {
+    pub adapter: Option<String>,
+    pub command: Option<Vec<String>>,
+    pub model: Option<String>,
+    pub cwd: Option<String>,
+    pub extra_args: Option<Vec<String>>,
+    pub prompt_prefix: Option<String>,
+    pub iterations: Option<u32>,
 }
 
 /// Load a configuration file from disk and deserialize it.

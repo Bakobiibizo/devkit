@@ -118,6 +118,16 @@ pub enum Command {
         #[arg(long = "include-hidden")]
         include_hidden: bool,
     },
+    /// Run commands in a shell and print a compact execution summary.
+    Summary {
+        #[command(subcommand)]
+        command: SummaryCommand,
+    },
+    /// Launch configured coding agents with a prompt and model.
+    Agent {
+        #[command(subcommand)]
+        command: AgentCommand,
+    },
     /// Docker helpers for generating base/project containers.
     Docker {
         #[command(subcommand)]
@@ -147,6 +157,90 @@ pub enum Command {
 pub enum ResearchCommand {
     /// Scaffold an isolated, project-local research workspace.
     Init(ResearchInitArgs),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SummaryCommand {
+    /// Run a configured task and summarize captured output.
+    Run(SummaryRunArgs),
+    /// Run an ad-hoc command and summarize captured output.
+    Exec(SummaryExecArgs),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AgentCommand {
+    /// Run a configured agent adapter.
+    Run(AgentRunArgs),
+    /// Show known background agent jobs.
+    List,
+    /// Show status and a compact log summary for a background agent job.
+    Status(AgentStatusArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct AgentRunArgs {
+    /// Agent config name. Defaults to `default` or the configured default agent.
+    #[arg(default_value = "default")]
+    pub agent: String,
+
+    /// Prompt text to send to the agent.
+    #[arg(long = "prompt", short = 'p')]
+    pub prompt: Option<String>,
+
+    /// Read prompt text from a file. Use `-` to read stdin.
+    #[arg(long = "prompt-file")]
+    pub prompt_file: Option<PathBuf>,
+
+    /// Override the configured model.
+    #[arg(long = "model", short = 'm')]
+    pub model: Option<String>,
+
+    /// Override the configured working directory.
+    #[arg(long = "cwd", short = 'C')]
+    pub cwd: Option<PathBuf>,
+
+    /// Run in the foreground instead of launching an async job.
+    #[arg(long = "attach", short = 'a', default_value_t = false)]
+    pub attach: bool,
+
+    /// Override the configured loop iteration count.
+    #[arg(long = "iterations", short = 'i')]
+    pub iterations: Option<u32>,
+
+    /// Additional adapter arguments.
+    #[arg(long = "arg")]
+    pub extra_args: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct AgentStatusArgs {
+    /// Job id printed by async `dev agent run`.
+    pub job_id: String,
+
+    /// Number of log lines to include.
+    #[arg(long = "tail", default_value_t = 80)]
+    pub tail: usize,
+}
+
+#[derive(Args, Debug)]
+pub struct SummaryRunArgs {
+    /// Configured task name to run.
+    pub task: String,
+
+    /// Print the raw captured output after the summary.
+    #[arg(long = "raw", default_value_t = false)]
+    pub raw: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct SummaryExecArgs {
+    /// Print the raw captured output after the summary.
+    #[arg(long = "raw", default_value_t = false)]
+    pub raw: bool,
+
+    /// Command argv to execute after `--`.
+    #[arg(trailing_var_arg = true, required = true)]
+    pub argv: Vec<String>,
 }
 
 #[derive(Args, Debug)]
@@ -302,6 +396,9 @@ pub struct InstallArgs {
     /// Overwrite existing scaffold files instead of skipping them.
     #[arg(long = "force", default_value_t = false)]
     pub force: bool,
+    /// Install tooling and run provisioning commands without writing scaffold files.
+    #[arg(long = "no-scaffold", default_value_t = false)]
+    pub no_scaffold: bool,
 }
 
 #[derive(Args, Debug)]

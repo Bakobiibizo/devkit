@@ -17,6 +17,14 @@ pub fn install(language: &str, force: bool) -> Result<()> {
     }
 }
 
+pub fn install_tools(language: &str) -> Result<()> {
+    match language {
+        "python" => python::install_tools(),
+        "elixir" | "ex" | "rust" | "typescript" | "ts" => Ok(()),
+        other => bail!("unsupported language scaffold: {other}"),
+    }
+}
+
 pub fn write_template(destination: &Utf8Path, template: &str) -> Result<()> {
     templates::write_template(destination, template)
 }

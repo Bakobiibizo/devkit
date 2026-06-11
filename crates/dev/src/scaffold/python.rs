@@ -13,9 +13,7 @@ const CI_WORKFLOW: &str = ".github/workflows/ci.yml";
 const GITIGNORE: &str = ".gitignore";
 
 pub fn install(force: bool) -> Result<()> {
-    ensure_uv()?; // installs uv if necessary
-    ensure_uv_tool("ruff")?;
-    ensure_uv_tool("mypy")?;
+    install_tools()?;
     ensure_file(GITIGNORE, "python/.gitignore", force)?;
     ensure_file(RUFF, "python/ruff.toml", force)?;
     ensure_file(MYPY, "python/mypy.ini", force)?;
@@ -23,6 +21,13 @@ pub fn install(force: bool) -> Result<()> {
     ensure_ci_workflow(force)?;
 
     println!("Python scaffolding complete");
+    Ok(())
+}
+
+pub fn install_tools() -> Result<()> {
+    ensure_uv()?; // installs uv if necessary
+    ensure_uv_tool("ruff")?;
+    ensure_uv_tool("mypy")?;
     Ok(())
 }
 
@@ -71,7 +76,7 @@ fn ensure_uv() -> Result<()> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .map_or(false, |status| status.success())
+        .is_ok_and(|status| status.success())
     {
         return Ok(());
     }
