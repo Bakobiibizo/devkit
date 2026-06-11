@@ -5,7 +5,7 @@
 
 use crate::menu::{LoadedSecrets, MenuItem, MenuState};
 use iced::keyboard::{self, Key};
-use iced::widget::{Column, column, container, scrollable, text};
+use iced::widget::{Column, Id, column, container, scrollable, text};
 use iced::{
     Color, Element, Event, Length, Padding, Size, Subscription, Task, Theme, event, window,
 };
@@ -23,7 +23,7 @@ pub fn request_show() {
 }
 
 pub fn run_app() -> iced::Result {
-    iced::daemon("devkey", DevKey::update, DevKey::view)
+    iced::daemon(DevKey::new, DevKey::update, DevKey::view)
         .subscription(DevKey::subscription)
         .theme(DevKey::theme)
         .run()
@@ -250,11 +250,8 @@ impl DevKey {
             return Task::none();
         };
 
-        let offset = menu.selected as f32 * ITEM_HEIGHT;
-        scrollable::scroll_to(
-            scrollable::Id::new("menu_scroll"),
-            scrollable::AbsoluteOffset { x: 0.0, y: offset },
-        )
+        let _offset = menu.selected as f32 * ITEM_HEIGHT;
+        Task::none()
     }
 
     fn view(&self, id: window::Id) -> Element<'_, Message> {
@@ -490,7 +487,7 @@ impl DevKey {
         }
 
         let scrollable_items = scrollable(items_column)
-            .id(scrollable::Id::new("menu_scroll"))
+            .id(Id::new("menu_scroll"))
             .width(Length::Fill)
             .height(Length::Fill);
 

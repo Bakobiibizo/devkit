@@ -23,8 +23,8 @@ windows = { version = "0.58", features = [
     "Win32_System_Memory",
 ]}
 # GUI framework - iced for custom styling
-iced = { version = "0.13", features = ["tokio"] }
+iced = { version = "0.14", features = ["tokio"] }
 # System tray
-tray-icon = "0.19"
+tray-icon = { version = "0.24", default-features = false, features = ["common-controls-v6"] }
 # Async runtime
 tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros"] }
