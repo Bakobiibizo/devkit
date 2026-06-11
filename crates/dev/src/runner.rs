@@ -2327,7 +2327,9 @@ fn local_summary(command: &str, result: &CapturedCommandResult, output: &str) ->
         .collect::<Vec<_>>();
 
     let preview = if interesting.is_empty() {
-        lines.by_ref().rev().take(12).collect::<Vec<_>>()
+        let mut tail = lines.by_ref().rev().take(12).collect::<Vec<_>>();
+        tail.reverse();
+        tail
     } else {
         interesting
     };
@@ -2397,7 +2399,7 @@ fn combine_output(stdout: &str, stderr: &str) -> String {
         (true, true) => String::new(),
         (false, true) => format!("stdout:\n{}", stdout),
         (true, false) => format!("stderr:\n{}", stderr),
-        (false, false) => format!("stdout:\n{}\nstderr:\n{}", stdout, stderr),
+        (false, false) => format!("stdout:\n{}\nstderr:\n{}", stdout.trim_end(), stderr),
     }
 }
 
