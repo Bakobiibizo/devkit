@@ -63,29 +63,29 @@ tail_bytes = 12288
 - `dev agent run <agent> --prompt "..."` – launch a configured agent asynchronously. Prints a job id and log path.
 - `dev agent run <agent> --attach --prompt-file task.md` – run the agent in the foreground.
 - `dev agent run <agent> --iterations 5 --prompt-file task.md` – override a loop adapter iteration count.
-- `dev agent list` – list background agent jobs.
+- `dev agent list` – list background agent jobs with `running`, `ok`, or `failed(<code>)` status.
 - `dev agent status <job-id> [--tail 80]` – show job state plus a compact log summary.
 
 Example Codex and loop agents:
 
 ```toml
-default_agent = "codex-low-cost"
+default_agent = "default"
 
-[agents.codex-low-cost]
+[agents.default]
 adapter = "codex"
-model = "gpt-5-mini"
 cwd = "."
-extra_args = ["--ask-for-approval", "never", "--sandbox", "workspace-write"]
+extra_args = ["--sandbox", "read-only"]
+# Optional: leave unset to use the Codex CLI default for the signed-in account.
+# model = "gpt-5"
 
 [agents.codex-loop]
 adapter = "loop"
-command = ["bash", "-lc", "codex exec --model \"$DEV_AGENT_MODEL\" --cd \"$DEV_AGENT_CWD\" -"]
-model = "gpt-5-mini"
+command = ["bash", "-lc", "if [ -n \"$DEV_AGENT_MODEL\" ]; then codex exec --model \"$DEV_AGENT_MODEL\" --cd \"$DEV_AGENT_CWD\" -; else codex exec --cd \"$DEV_AGENT_CWD\" -; fi"]
 cwd = "."
 iterations = 3
 ```
 
-Codex endpoint/provider settings live in Codex config, not devkit config. Put provider definitions in `~/.codex/config.toml` or project `.codex/config.toml`, then refer to the model from the devkit agent:
+Codex endpoint/provider settings live in Codex config, not devkit config. Put provider definitions in `~/.codex/config.toml` or project `.codex/config.toml`, then optionally refer to that model from the devkit agent:
 
 ```toml
 model = "gpt-5-mini"

@@ -11,13 +11,14 @@ tail_bytes = 12288
 # Optional: command receives a prompt on stdin and prints the summary on stdout.
 # llm_command = "your-llm-summarizer"
 
-default_agent = "codex-low-cost"
+default_agent = "default"
 
-[agents.codex-low-cost]
+[agents.default]
 adapter = "codex"
-model = "gpt-5-mini"
 cwd = "."
-extra_args = ["--ask-for-approval", "never", "--sandbox", "workspace-write"]
+extra_args = ["--sandbox", "read-only"]
+# Optional: leave unset to use the Codex CLI default for the signed-in account.
+# model = "gpt-5"
 
 [agents.generic-example]
 adapter = "generic"
@@ -27,8 +28,7 @@ cwd = "."
 
 [agents.codex-loop]
 adapter = "loop"
-command = ["bash", "-lc", "codex exec --model \"$DEV_AGENT_MODEL\" --cd \"$DEV_AGENT_CWD\" -"]
-model = "gpt-5-mini"
+command = ["bash", "-lc", "if [ -n \"$DEV_AGENT_MODEL\" ]; then codex exec --model \"$DEV_AGENT_MODEL\" --cd \"$DEV_AGENT_CWD\" -; else codex exec --cd \"$DEV_AGENT_CWD\" -; fi"]
 cwd = "."
 iterations = 3
 

@@ -90,14 +90,14 @@ dev config generate [PATH] --force
 dev summary run <task>
 dev summary exec -- cargo test
 
-dev agent run codex-low-cost --prompt "Fix the failing tests"
+dev agent run default --prompt "Fix the failing tests"
 dev agent run codex-loop --iterations 3 --prompt-file task.md
 dev agent run codex-loop --attach --prompt "Run one foreground pass"
 dev agent list
 dev agent status <job-id>
 ```
 
-Configure agents in devkit config and configure Codex model providers/endpoints in `~/.codex/config.toml`.
+Configure agents in devkit config and configure Codex model providers/endpoints in `~/.codex/config.toml`. `dev agent list` reports `running`, `ok`, or `failed(<code>)`.
 
 ### Language tooling
 

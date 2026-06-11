@@ -1573,11 +1573,12 @@ fn handle_agent_run(state: &AppState, args: crate::cli::AgentRunArgs) -> Result<
         args.agent.clone()
     };
 
-    let agents = state
-        .config
-        .agents
-        .as_ref()
-        .ok_or_else(|| anyhow!("no agents configured; add an [agents.{agent_name}] table"))?;
+    let agents = state.config.agents.as_ref().ok_or_else(|| {
+        anyhow!(
+            "no agents configured; add an [agents.{agent_name}] table to {}",
+            state.config_path
+        )
+    })?;
     let agent = agents
         .get(&agent_name)
         .with_context(|| format!("unknown agent `{}`", agent_name))?;
@@ -1629,6 +1630,7 @@ struct AgentJobRecord {
     agent: String,
     pid: u32,
     log_path: PathBuf,
+    status_path: PathBuf,
     command: String,
     model: Option<String>,
     cwd: PathBuf,
@@ -1662,11 +1664,7 @@ fn handle_agent_list() -> Result<()> {
     }
 
     for job in jobs {
-        let state = if process_is_running(job.pid) {
-            "running"
-        } else {
-            "exited"
-        };
+        let state = agent_job_state(&job);
         println!(
             "{}  {}  pid={}  agent={}  model={}  log={}",
             job.id,
@@ -1683,10 +1681,9 @@ fn handle_agent_list() -> Result<()> {
 fn handle_agent_status(job_id: &str, tail: usize) -> Result<()> {
     let path = agent_jobs_dir()?.join(format!("{}.job", job_id));
     let job = read_agent_job(&path).with_context(|| format!("reading job `{}`", job_id))?;
-    let running = process_is_running(job.pid);
     println!("Job: {}", job.id);
     println!("Agent: {}", job.agent);
-    println!("State: {}", if running { "running" } else { "exited" });
+    println!("State: {}", agent_job_state(&job));
     println!("PID: {}", job.pid);
     println!("Model: {}", job.model.as_deref().unwrap_or("<none>"));
     println!("CWD: {}", job.cwd.display());
@@ -1870,10 +1867,10 @@ fn launch_agent_foreground_once(launch: &AgentLaunch, iteration: u32) -> Result<
         Ok(())
     } else {
         bail!(
-            "agent iteration {}/{} exited with code {:?}",
+            "agent iteration {}/{} exited with code {}",
             iteration,
             launch.iterations,
-            status.code()
+            exit_code_display(status)
         )
     }
 }
@@ -1885,60 +1882,40 @@ fn launch_agent_detached(agent_name: &str, launch: AgentLaunch) -> Result<()> {
     let started_at = unix_timestamp()?;
     let job_id = format!("{}-{}", started_at, safe_agent_name(agent_name));
     let log_path = agent_log_path(&job_id)?;
+    let status_path = agent_status_path(&job_id)?;
     let stdout = fs::File::create(&log_path)
         .with_context(|| format!("creating agent log {}", log_path.display()))?;
     let stderr = stdout
         .try_clone()
         .with_context(|| format!("cloning agent log {}", log_path.display()))?;
 
-    let mut command = ProcessCommand::new(&launch.argv[0]);
-    command.args(&launch.argv[1..]);
+    let script = detached_agent_script(&launch.argv, launch.iterations, launch.prompt_stdin);
+    let mut command = ProcessCommand::new("bash");
+    command.arg("-lc").arg(script);
     command.current_dir(&launch.cwd);
     command.env("DEV_AGENT_PROMPT", &launch.prompt);
     command.env("DEV_AGENT_CWD", &launch.cwd);
     command.env("DEV_AGENT_ITERATIONS", launch.iterations.to_string());
+    command.env("DEV_AGENT_STATUS_PATH", &status_path);
     if let Some(model) = &launch.model {
         command.env("DEV_AGENT_MODEL", model);
     }
-    if launch.iterations > 1 {
-        let loop_script = detached_loop_script(&launch.argv, launch.iterations);
-        command = ProcessCommand::new("bash");
-        command.arg("-lc").arg(loop_script);
-        command.current_dir(&launch.cwd);
-        command.env("DEV_AGENT_PROMPT", &launch.prompt);
-        command.env("DEV_AGENT_CWD", &launch.cwd);
-        command.env("DEV_AGENT_ITERATIONS", launch.iterations.to_string());
-        if let Some(model) = &launch.model {
-            command.env("DEV_AGENT_MODEL", model);
-        }
-    }
-    if launch.prompt_stdin {
-        command.stdin(Stdio::piped());
-    } else {
-        command.stdin(Stdio::null());
-    }
+    command.stdin(Stdio::null());
     command.stdout(Stdio::from(stdout));
     command.stderr(Stdio::from(stderr));
 
-    let mut child = command.spawn().with_context(|| {
+    let child = command.spawn().with_context(|| {
         format!(
             "launching detached agent `{}`",
             format_command(&launch.argv)
         )
     })?;
-    if launch.prompt_stdin
-        && launch.iterations == 1
-        && let Some(mut stdin) = child.stdin.take()
-    {
-        stdin
-            .write_all(launch.prompt.as_bytes())
-            .context("writing prompt to detached agent stdin")?;
-    }
     let record = AgentJobRecord {
         id: job_id,
         agent: agent_name.to_owned(),
         pid: child.id(),
         log_path: log_path.clone(),
+        status_path: status_path.clone(),
         command: format_command(&launch.argv),
         model: launch.model.clone(),
         cwd: launch.cwd.clone(),
@@ -1949,15 +1926,21 @@ fn launch_agent_detached(agent_name: &str, launch: AgentLaunch) -> Result<()> {
     println!("Agent job: {}", record.id);
     println!("PID: {}", child.id());
     println!("Log: {}", log_path.display());
+    println!("Status: {}", status_path.display());
     println!("Check later: dev agent status {}", record.id);
     Ok(())
 }
 
-fn detached_loop_script(argv: &[String], iterations: u32) -> String {
+fn detached_agent_script(argv: &[String], iterations: u32, prompt_stdin: bool) -> String {
     let command = shell_command(argv);
     let display = shell_single_quote(&format_command(argv));
+    let invoke = if prompt_stdin {
+        format!("printf '%s' \"$DEV_AGENT_PROMPT\" | DEV_AGENT_ITERATION=\"$i\" {command}")
+    } else {
+        format!("DEV_AGENT_ITERATION=\"$i\" {command}")
+    };
     format!(
-        "for i in $(seq 1 {iterations}); do printf '[iteration %s/{iterations}] %s\\n' \"$i\" {display}; printf '%s' \"$DEV_AGENT_PROMPT\" | DEV_AGENT_ITERATION=\"$i\" {command}; status=$?; if [ $status -ne 0 ]; then exit $status; fi; done",
+        "status=0; for i in $(seq 1 {iterations}); do if [ {iterations} -gt 1 ]; then printf '[iteration %s/{iterations}] %s\\n' \"$i\" {display}; fi; {invoke}; status=$?; if [ $status -ne 0 ]; then break; fi; done; finished_at=$(date +%s); tmp=\"$DEV_AGENT_STATUS_PATH.tmp\"; {{ printf 'exit_code=%s\\n' \"$status\"; printf 'finished_at=%s\\n' \"$finished_at\"; }} > \"$tmp\" && mv \"$tmp\" \"$DEV_AGENT_STATUS_PATH\"; exit $status",
     )
 }
 
@@ -1970,6 +1953,13 @@ fn agent_log_path(job_id: &str) -> Result<PathBuf> {
     let dir = home.join(".dev").join("agents");
     fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     Ok(dir.join(format!("{}.log", job_id)))
+}
+
+fn agent_status_path(job_id: &str) -> Result<PathBuf> {
+    let home = dirs::home_dir().context("determining home directory")?;
+    let dir = home.join(".dev").join("agents").join("status");
+    fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    Ok(dir.join(format!("{}.status", job_id)))
 }
 
 fn agent_jobs_dir() -> Result<PathBuf> {
@@ -2006,6 +1996,7 @@ fn write_agent_job(record: &AgentJobRecord) -> Result<()> {
     out.push_str(&format!("agent={}\n", record.agent));
     out.push_str(&format!("pid={}\n", record.pid));
     out.push_str(&format!("log_path={}\n", record.log_path.display()));
+    out.push_str(&format!("status_path={}\n", record.status_path.display()));
     out.push_str(&format!(
         "command={}\n",
         record.command.replace('\n', "\\n")
@@ -2035,17 +2026,49 @@ fn read_agent_job(path: &Path) -> Result<AgentJobRecord> {
             .ok_or_else(|| anyhow!("job file missing `{}`", key))
     };
     let model = get("model")?;
+    let id = get("id")?;
+    let status_path = values
+        .get("status_path")
+        .map(PathBuf::from)
+        .unwrap_or(agent_status_path(&id)?);
     Ok(AgentJobRecord {
-        id: get("id")?,
+        id,
         agent: get("agent")?,
         pid: get("pid")?.parse().context("parsing job pid")?,
         log_path: PathBuf::from(get("log_path")?),
+        status_path,
         command: get("command")?.replace("\\n", "\n"),
         model: if model.is_empty() { None } else { Some(model) },
         cwd: PathBuf::from(get("cwd")?),
         iterations: get("iterations")?.parse().context("parsing iterations")?,
         started_at: get("started_at")?.parse().context("parsing started_at")?,
     })
+}
+
+fn agent_job_state(job: &AgentJobRecord) -> String {
+    if process_is_running(job.pid) {
+        return "running".to_owned();
+    }
+
+    match read_agent_exit_code(&job.status_path) {
+        Ok(Some(0)) => "ok".to_owned(),
+        Ok(Some(code)) => format!("failed({code})"),
+        Ok(None) => "exited".to_owned(),
+        Err(_) => "exited".to_owned(),
+    }
+}
+
+fn read_agent_exit_code(path: &Path) -> Result<Option<i32>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    for line in raw.lines() {
+        if let Some(value) = line.strip_prefix("exit_code=") {
+            return Ok(value.parse().ok());
+        }
+    }
+    Ok(None)
 }
 
 fn process_is_running(pid: u32) -> bool {
@@ -2145,16 +2168,17 @@ fn execute_commands_summarized(
             println!("[ok] {} (completed in {:.2?})", render, result.elapsed);
         } else if spec.allow_fail {
             println!(
-                "[warn] {} failed with exit code {:?} (ignored)",
+                "[warn] {} failed with exit code {} (ignored)",
                 render,
-                result.status.code()
+                exit_code_display(result.status)
             );
         } else {
-            bail!(
-                "command `{}` failed with exit code {:?}",
+            eprintln!(
+                "command `{}` failed with exit code {}",
                 render,
-                result.status.code()
+                exit_code_display(result.status)
             );
+            std::process::exit(result.status.code().unwrap_or(1));
         }
     }
 
@@ -2249,10 +2273,10 @@ fn summarize_with_llm_command(
          Be concise. Include the exit status, likely root cause, and next action.\n\
          Do not reproduce long traces.\n\n\
          Command: {command}\n\
-         Exit code: {:?}\n\
+         Exit code: {}\n\
          Duration: {:.2?}\n\n\
          Captured output:\n{output}\n",
-        result.status.code(),
+        exit_code_display(result.status),
         result.elapsed
     );
 
@@ -2277,8 +2301,8 @@ fn summarize_with_llm_command(
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         bail!(
-            "LLM summary command exited with {:?}: {}",
-            output.status.code(),
+            "LLM summary command exited with {}: {}",
+            exit_code_display(output.status),
             stderr.trim()
         );
     }
@@ -2311,7 +2335,7 @@ fn local_summary(command: &str, result: &CapturedCommandResult, output: &str) ->
     let mut out = String::new();
     out.push_str("Summary\n");
     out.push_str(&format!("- command: {}\n", command));
-    out.push_str(&format!("- exit: {:?}\n", result.status.code()));
+    out.push_str(&format!("- exit: {}\n", exit_code_display(result.status)));
     out.push_str(&format!("- duration: {:.2?}\n", result.elapsed));
     if output.trim().is_empty() {
         out.push_str("- output: <empty>\n");
@@ -2324,6 +2348,13 @@ fn local_summary(command: &str, result: &CapturedCommandResult, output: &str) ->
         }
     }
     out
+}
+
+fn exit_code_display(status: ExitStatus) -> String {
+    status
+        .code()
+        .map(|code| code.to_string())
+        .unwrap_or_else(|| "terminated".to_owned())
 }
 
 fn bounded_output(output: &str, max_output_bytes: usize, tail_bytes: usize) -> String {

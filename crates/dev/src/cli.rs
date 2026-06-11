@@ -655,7 +655,9 @@ pub fn parse() -> Result<Cli> {
             ) =>
         {
             print!("{err}");
-            if let Some(dynamic) = dynamic_help(&args)? {
+            if should_append_dynamic_help(&args)
+                && let Some(dynamic) = dynamic_help(&args)?
+            {
                 print!("{dynamic}");
             }
             std::process::exit(0);
@@ -666,6 +668,45 @@ pub fn parse() -> Result<Cli> {
         }
         Err(err) => Err(anyhow::anyhow!(err.to_string())),
     }
+}
+
+fn should_append_dynamic_help(args: &[std::ffi::OsString]) -> bool {
+    let mut saw_help = false;
+    let mut positional = Vec::new();
+    let mut skip_next = false;
+
+    for arg in args.iter().skip(1) {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+
+        let value = arg.to_string_lossy();
+        match value.as_ref() {
+            "--help" | "-h" => {
+                saw_help = true;
+                continue;
+            }
+            "--file" | "-f" | "--chdir" | "-C" | "--project" | "--language" | "-l" => {
+                skip_next = true;
+                continue;
+            }
+            _ => {}
+        }
+
+        if value.starts_with("--file=")
+            || value.starts_with("--chdir=")
+            || value.starts_with("--project=")
+            || value.starts_with("--language=")
+            || value.starts_with('-')
+        {
+            continue;
+        }
+
+        positional.push(value.into_owned());
+    }
+
+    saw_help && positional.is_empty()
 }
 
 fn dynamic_help(args: &[std::ffi::OsString]) -> Result<Option<String>> {
