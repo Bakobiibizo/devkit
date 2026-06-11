@@ -16,6 +16,6 @@ mod walk;
 
 fn main() -> anyhow::Result<()> {
     logging::init();
-    let app = cli::parse();
+    let app = cli::parse()?;
     runner::run(app)
 }

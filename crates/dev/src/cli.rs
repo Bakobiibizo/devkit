@@ -1,6 +1,9 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use anyhow::Result;
+use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
+
+use crate::config;
 
 /// Top-level CLI definition matching the spec in `docs/spec.md`.
 #[derive(Parser, Debug)]
@@ -638,6 +641,155 @@ pub enum VaultCommand {
 }
 
 /// Helper entry point so `main` can stay minimal.
-pub fn parse() -> Cli {
-    Cli::parse()
+pub fn parse() -> Result<Cli> {
+    let args = std::env::args_os().collect::<Vec<_>>();
+    match Cli::try_parse_from(&args) {
+        Ok(cli) => Ok(cli),
+        Err(err)
+            if matches!(
+                err.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+            ) =>
+        {
+            print!("{err}");
+            if let Some(dynamic) = dynamic_help(&args)? {
+                print!("{dynamic}");
+            }
+            std::process::exit(0);
+        }
+        Err(err) if err.kind() == ErrorKind::DisplayVersion => {
+            print!("{err}");
+            std::process::exit(0);
+        }
+        Err(err) => Err(anyhow::anyhow!(err.to_string())),
+    }
+}
+
+fn dynamic_help(args: &[std::ffi::OsString]) -> Result<Option<String>> {
+    let Some(path) = resolve_help_config_path(args) else {
+        return Ok(None);
+    };
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let path = camino::Utf8PathBuf::from_path_buf(path)
+        .map_err(|_| anyhow::anyhow!("config path must be valid UTF-8"))?;
+    let cfg = match config::load_from_path(&path) {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            return Ok(Some(format!(
+                "\nConfigured items unavailable\n  Could not load config {path}: {err:#}\n"
+            )));
+        }
+    };
+    let mut out = String::new();
+    let mut wrote_any = false;
+
+    if let Some(tasks) = &cfg.tasks
+        && !tasks.is_empty()
+    {
+        wrote_any = true;
+        out.push_str("\nConfigured tasks\n");
+        for name in tasks.keys() {
+            out.push_str(&format!("  dev run {name}\n"));
+        }
+    }
+
+    if let Some(languages) = &cfg.languages
+        && !languages.is_empty()
+    {
+        wrote_any = true;
+        out.push_str("\nConfigured language pipelines\n");
+        for (name, language) in languages {
+            let mut verbs = Vec::new();
+            if let Some(pipelines) = &language.pipelines {
+                if pipelines.fmt.is_some() {
+                    verbs.push("fmt");
+                }
+                if pipelines.lint.is_some() {
+                    verbs.push("lint");
+                }
+                if pipelines.type_check.is_some() {
+                    verbs.push("type");
+                }
+                if pipelines.test.is_some() {
+                    verbs.push("test");
+                }
+                if pipelines.fix.is_some() {
+                    verbs.push("fix");
+                }
+                if pipelines.check.is_some() {
+                    verbs.push("check");
+                }
+                if pipelines.ci.is_some() {
+                    verbs.push("ci");
+                }
+            }
+            out.push_str(&format!(
+                "  {name}: {}\n",
+                if verbs.is_empty() {
+                    "no pipelines".to_owned()
+                } else {
+                    verbs.join(", ")
+                }
+            ));
+        }
+    }
+
+    if let Some(agents) = &cfg.agents
+        && !agents.is_empty()
+    {
+        wrote_any = true;
+        out.push_str("\nConfigured agents\n");
+        for (name, agent) in agents {
+            let adapter = agent.adapter.as_deref().unwrap_or("codex");
+            let model = agent.model.as_deref().unwrap_or("<configured by adapter>");
+            let iterations = agent
+                .iterations
+                .map(|value| format!(", iterations={value}"))
+                .unwrap_or_default();
+            out.push_str(&format!(
+                "  dev agent run {name}  ({adapter}, model={model}{iterations})\n"
+            ));
+        }
+    }
+
+    if wrote_any {
+        out.push_str(&format!("\nConfig source: {path}\n"));
+        Ok(Some(out))
+    } else {
+        Ok(None)
+    }
+}
+
+fn resolve_help_config_path(args: &[std::ffi::OsString]) -> Option<PathBuf> {
+    let mut iter = args.iter().peekable();
+    while let Some(arg) = iter.next() {
+        let value = arg.to_string_lossy();
+        if value == "--file" || value == "-f" {
+            return iter.next().map(PathBuf::from);
+        }
+        if let Some(path) = value.strip_prefix("--file=") {
+            return Some(PathBuf::from(path));
+        }
+    }
+
+    let cwd = std::env::current_dir().ok()?;
+    for dir in cwd.ancestors() {
+        for candidate in config_candidates(dir) {
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    dirs::home_dir().map(|home| home.join(".dev").join("config.toml"))
+}
+
+fn config_candidates(dir: &Path) -> [PathBuf; 2] {
+    [
+        dir.join(".dev").join("config.toml"),
+        dir.join("tools").join("dev").join("config.toml"),
+    ]
 }

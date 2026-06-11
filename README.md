@@ -16,6 +16,8 @@ A single-binary Rust CLI for unified developer workflows:
 - System setup (`dev setup ...`)
 - Dockerized GPU dev containers (`dev docker ...`)
 - Review overlays and directory manifests (`dev review`, `dev walk`)
+- Summarized command execution (`dev summary ...`)
+- Async configurable agents (`dev agent ...`)
 
 ### `devkey` (Windows only)
 
@@ -67,6 +69,9 @@ dev check
 dev ci
 
 dev all <fmt|lint|type|test|fix|check|ci>
+
+# Help includes configured tasks, language pipelines, and agents.
+dev --help
 ```
 
 ### Config
@@ -76,6 +81,21 @@ dev config
 dev config check
 dev config generate [PATH] --force
 ```
+
+### Summary and async agents
+
+```bash
+dev summary run <task>
+dev summary exec -- cargo test
+
+dev agent run codex-low-cost --prompt "Fix the failing tests"
+dev agent run codex-loop --iterations 3 --prompt-file task.md
+dev agent run codex-loop --attach --prompt "Run one foreground pass"
+dev agent list
+dev agent status <job-id>
+```
+
+Configure agents in devkit config and configure Codex model providers/endpoints in `~/.codex/config.toml`.
 
 ### Language tooling
 

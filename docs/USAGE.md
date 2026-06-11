@@ -19,6 +19,9 @@ dev config show
 
 # Run the lint workflow (language inferred from config)
 dev lint
+
+# Show CLI help plus configured tasks, pipelines, and agents
+dev --help
 ```
 
 Global flags:
@@ -36,6 +39,63 @@ Global flags:
 - `dev run <task>` – run a raw task defined in config.
 - `dev fmt|lint|test|check|ci` – run the language pipeline.
 - `dev all <verb>` – run `fmt`, `lint`, etc. across every configured language.
+- `dev --help` – show built-in commands plus configured tasks, language pipelines, and agents from the active config.
+
+### Summarized Command Runner
+
+- `dev summary run <task>` – run a configured task while capturing stdout/stderr and printing a compact summary.
+- `dev summary exec -- <command...>` – run an ad-hoc command through a shell and summarize the output.
+
+The summary runner is intended for long test suites or noisy build failures where the caller only needs the important errors. Configure it with:
+
+```toml
+[summary]
+shell = "bash"
+max_output_bytes = 65536
+tail_bytes = 12288
+# Optional command receives a prompt on stdin and writes a summary to stdout.
+# llm_command = "your-llm-summarizer"
+```
+
+### Async Agents
+
+- `dev agent run <agent> --prompt "..."` – launch a configured agent asynchronously. Prints a job id and log path.
+- `dev agent run <agent> --attach --prompt-file task.md` – run the agent in the foreground.
+- `dev agent run <agent> --iterations 5 --prompt-file task.md` – override a loop adapter iteration count.
+- `dev agent list` – list background agent jobs.
+- `dev agent status <job-id> [--tail 80]` – show job state plus a compact log summary.
+
+Example Codex and loop agents:
+
+```toml
+default_agent = "codex-low-cost"
+
+[agents.codex-low-cost]
+adapter = "codex"
+model = "gpt-5-mini"
+cwd = "."
+extra_args = ["--ask-for-approval", "never", "--sandbox", "workspace-write"]
+
+[agents.codex-loop]
+adapter = "loop"
+command = ["bash", "-lc", "codex exec --model \"$DEV_AGENT_MODEL\" --cd \"$DEV_AGENT_CWD\" -"]
+model = "gpt-5-mini"
+cwd = "."
+iterations = 3
+```
+
+Codex endpoint/provider settings live in Codex config, not devkit config. Put provider definitions in `~/.codex/config.toml` or project `.codex/config.toml`, then refer to the model from the devkit agent:
+
+```toml
+model = "gpt-5-mini"
+model_provider = "proxy"
+
+[model_providers.proxy]
+name = "OpenAI-compatible proxy"
+base_url = "http://127.0.0.1:8000/v1"
+env_key = "OPENAI_API_KEY"
+wire_api = "responses"
+```
 
 ### Configuration Helpers
 
