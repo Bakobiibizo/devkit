@@ -123,7 +123,20 @@ deleted or reduced to dispatch glue; behavior identical (existing tests +
   simplification and shared-helper extraction once Blocks 2–3 settle the layout.
 - Acceptance: clippy clean, reduced duplication, no behavior change.
 
-### Block 7 — `onboarding-and-docs` (last — after surface stabilizes)
+### Block 7 — `git-workflow-redesign`
+- `dev git branch-create` / `branch-finalize` are built around a hard-coded
+  `release-candidate` base branch — not a normal git workflow, and cumbersome
+  in practice (user feedback 2026-06-11).
+- Redesign around standard git conventions: branch off the repo's default
+  branch (or current HEAD) by default, with the base configurable via
+  `[git]` config rather than assumed; keep `release-pr` versioning flow working.
+- Simplify the ceremony: sensible defaults, fewer required arguments, clear
+  errors when the worktree is dirty.
+- Acceptance: `dev git branch-create <name>` works on a vanilla repo with no
+  `release-candidate` branch and no extra config; existing config-driven
+  overrides still respected; docs/help updated in Block 8.
+
+### Block 8 — `onboarding-and-docs` (last — after surface stabilizes)
 - Rewrite `README.md` quick-start against the post-refactor reality; verify the
   fresh-clone path works as written.
 - Update `docs/USAGE.md` and `docs/spec.md` to cover all 19 commands
