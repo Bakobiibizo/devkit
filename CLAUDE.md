@@ -8,19 +8,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Devkit is a Rust workspace containing two crates:
-- **`dev` (crates/dev)**: A unified CLI for developer workflows across Rust, Python, and TypeScript projects
-- **`devkey` (crates/devkey)**: A Windows-only hotkey popup for quick access to env vars and dev tasks (Ctrl+;)
+Devkit is a Rust workspace containing one crate:
+- **`dev` (crates/dev)**: A unified CLI for developer workflows across Rust, Python, TypeScript, and Elixir projects
 
 ## Build & Development Commands
 
 ```bash
 # Build entire workspace
 cargo build --workspace
-
-# Build individual crates
-cargo build -p devkit-cli    # dev CLI
-cargo build -p devkey        # Windows hotkey tool
 
 # Install dev CLI locally
 cargo install --path crates/dev
@@ -73,15 +68,6 @@ src/
 - Setup components implement `detect() -> InstallState` and `install()` contract
 - Output uses `[ok]/[warn]/[error]` markers for feedback
 
-### devkey (crates/devkey)
-
-Windows tray application with global hotkey:
-- `hotkey.rs` - Windows API hotkey registration
-- `window.rs` - iced GUI popup
-- `env.rs` - Environment variable loading
-- `inject.rs` - SendInput for text injection
-- `menu.rs` - Tray menu handling
-
 ## Config Structure
 
 The CLI reads from `~/.dev/config.toml`:
@@ -122,4 +108,3 @@ cargo run -p devkit-cli -- config check
 - `rust-embed` - Template embedding
 - `anyhow` - Error handling
 - `tracing` - Logging
-- `iced` + `windows` crate - devkey GUI (Windows only)

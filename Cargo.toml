@@ -2,10 +2,7 @@
 resolver = "2"
 members = [
     "crates/dev",
-    "crates/devkey",
 ]
-# Only build dev CLI by default (devkey is Windows-only)
-default-members = ["crates/dev"]
 
 [workspace.package]
 edition = "2024"

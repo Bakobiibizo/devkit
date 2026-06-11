@@ -2,9 +2,7 @@
 
 A unified developer workflow toolkit for Rust, Python, TypeScript, and Elixir projects.
 
-## Components
-
-### `dev` CLI
+## `dev` CLI
 
 A single-binary Rust CLI for unified developer workflows:
 
@@ -18,10 +16,6 @@ A single-binary Rust CLI for unified developer workflows:
 - Review overlays and directory manifests (`dev review`, `dev walk`)
 - Summarized command execution (`dev summary ...`)
 - Async configurable agents (`dev agent ...`)
-
-### `devkey` (Windows only)
-
-A hotkey-triggered popup for quick access to environment variables and dev tasks. Press `Ctrl+;` to open.
 
 For the authoritative spec, see `docs/spec.md`.
 
@@ -42,10 +36,6 @@ cd devkit
 
 # Install dev CLI
 cargo install --path crates/dev
-
-# (Windows only) Build devkey
-cargo build --release -p devkey
-# Binary at target/release/devkey.exe
 ```
 
 ### Prebuilt binaries

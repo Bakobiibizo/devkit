@@ -1,10 +1,15 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.4
+  - repo: local
     hooks:
-      - id: ruff
-      - id: ruff-format
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
-    hooks:
-      - id: mypy
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --workspace --all-targets -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
