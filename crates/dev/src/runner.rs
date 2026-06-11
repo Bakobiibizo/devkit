@@ -635,7 +635,7 @@ fn handle_verb(state: &AppState, verb: Verb) -> Result<()> {
         verb.as_str(),
         language
     );
-    run_task_sequence(state, &tasks)
+    run_task_sequence_summarized(state, &tasks)
 }
 
 fn handle_all(state: &AppState, verb: Verb) -> Result<()> {
@@ -659,7 +659,7 @@ fn handle_all(state: &AppState, verb: Verb) -> Result<()> {
         }
         any_ran = true;
         println!("- Language `{}`", language);
-        run_task_sequence(state, &tasks)?;
+        run_task_sequence_summarized(state, &tasks)?;
     }
 
     if !any_ran {
@@ -1535,9 +1535,11 @@ language = 'typescript'
     }
 }
 
-fn run_task_sequence(state: &AppState, tasks: &[String]) -> Result<()> {
+fn run_task_sequence_summarized(state: &AppState, tasks: &[String]) -> Result<()> {
     for task in tasks {
-        handle_run(state, task)?;
+        println!("Running summarized task `{}`", task);
+        let commands = state.tasks.flatten(task)?;
+        execute_commands_summarized(state, task, &commands, false)?;
     }
     Ok(())
 }

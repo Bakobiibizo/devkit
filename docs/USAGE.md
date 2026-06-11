@@ -20,7 +20,7 @@ dev config show
 # Run the lint workflow (language inferred from config)
 dev lint
 
-# Show CLI help plus configured tasks, pipelines, and agents
+# Show CLI help plus a compact configured workflow summary
 dev --help
 ```
 
@@ -36,15 +36,16 @@ Global flags:
 ### Task Execution
 
 - `dev list` – list known tasks and pipelines.
-- `dev run <task>` – run a raw task defined in config.
-- `dev fmt|lint|test|check|ci` – run the language pipeline.
-- `dev all <verb>` – run `fmt`, `lint`, etc. across every configured language.
-- `dev --help` – show built-in commands plus configured tasks, language pipelines, and agents from the active config.
+- `dev run <task>` – run a raw task defined in config with normal subprocess output.
+- `dev fmt|lint|test|check|ci` – run the language pipeline with summarized subprocess output.
+- `dev all <verb>` – run `fmt`, `lint`, etc. across every configured language with summarized subprocess output.
+- `dev --help` – show built-in commands plus compact summaries of first-class verbs, configured tasks, language pipelines, and agents from the active config.
 
 ### Summarized Command Runner
 
 - `dev summary run <task>` – run a configured task while capturing stdout/stderr and printing a compact summary.
 - `dev summary exec -- <command...>` – run an ad-hoc command through a shell and summarize the output.
+- Add `--raw` to include the captured stdout/stderr after the summary.
 
 The summary runner is intended for long test suites or noisy build failures where the caller only needs the important errors. Configure it with:
 

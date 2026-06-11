@@ -32,24 +32,27 @@ pub enum Command {
     /// List available tasks and pipelines.
     List,
     /// Execute a named task or pipeline.
-    Run {
-        task: String,
-    },
+    Run { task: String },
     /// Start a long-running development server for the current project.
     Start(StartArgs),
     /// Standard verbs dispatch to the current or selected language pipeline.
+    #[command(hide = true)]
     Fmt,
+    #[command(hide = true)]
     Lint,
     #[command(name = "type")]
+    #[command(hide = true)]
     TypeCheck,
+    #[command(hide = true)]
     Test,
+    #[command(hide = true)]
     Fix,
+    #[command(hide = true)]
     Check,
+    #[command(hide = true)]
     Ci,
     /// Run aggregations across all languages for a given verb.
-    All {
-        verb: Verb,
-    },
+    All { verb: Verb },
     /// Install tooling and scaffolds for a language (defaults to configured language).
     Install(InstallArgs),
     /// Manage language defaults.
@@ -686,73 +689,29 @@ fn dynamic_help(args: &[std::ffi::OsString]) -> Result<Option<String>> {
     let mut out = String::new();
     let mut wrote_any = false;
 
-    if let Some(tasks) = &cfg.tasks
-        && !tasks.is_empty()
-    {
-        wrote_any = true;
-        out.push_str("\nConfigured tasks\n");
-        for name in tasks.keys() {
-            out.push_str(&format!("  dev run {name}\n"));
-        }
-    }
+    let task_count = cfg.tasks.as_ref().map(|tasks| tasks.len()).unwrap_or(0);
+    let language_summary = summarize_languages(&cfg);
+    let agent_summary = summarize_agents(&cfg);
 
-    if let Some(languages) = &cfg.languages
-        && !languages.is_empty()
-    {
+    if task_count > 0 || !language_summary.is_empty() || !agent_summary.is_empty() {
         wrote_any = true;
-        out.push_str("\nConfigured language pipelines\n");
-        for (name, language) in languages {
-            let mut verbs = Vec::new();
-            if let Some(pipelines) = &language.pipelines {
-                if pipelines.fmt.is_some() {
-                    verbs.push("fmt");
-                }
-                if pipelines.lint.is_some() {
-                    verbs.push("lint");
-                }
-                if pipelines.type_check.is_some() {
-                    verbs.push("type");
-                }
-                if pipelines.test.is_some() {
-                    verbs.push("test");
-                }
-                if pipelines.fix.is_some() {
-                    verbs.push("fix");
-                }
-                if pipelines.check.is_some() {
-                    verbs.push("check");
-                }
-                if pipelines.ci.is_some() {
-                    verbs.push("ci");
-                }
+        out.push_str("\nConfigured workflows\n");
+        out.push_str("  verbs: dev fmt|lint|type|test|fix|check|ci\n");
+        if task_count > 0 {
+            out.push_str(&format!(
+                "  tasks: {task_count} configured (run `dev list` for names)\n"
+            ));
+            if let Some(example) = first_task_name(&cfg) {
+                out.push_str(&format!("  example: dev run {example}\n"));
             }
-            out.push_str(&format!(
-                "  {name}: {}\n",
-                if verbs.is_empty() {
-                    "no pipelines".to_owned()
-                } else {
-                    verbs.join(", ")
-                }
-            ));
         }
-    }
-
-    if let Some(agents) = &cfg.agents
-        && !agents.is_empty()
-    {
-        wrote_any = true;
-        out.push_str("\nConfigured agents\n");
-        for (name, agent) in agents {
-            let adapter = agent.adapter.as_deref().unwrap_or("codex");
-            let model = agent.model.as_deref().unwrap_or("<configured by adapter>");
-            let iterations = agent
-                .iterations
-                .map(|value| format!(", iterations={value}"))
-                .unwrap_or_default();
-            out.push_str(&format!(
-                "  dev agent run {name}  ({adapter}, model={model}{iterations})\n"
-            ));
+        if !language_summary.is_empty() {
+            out.push_str(&format!("  languages: {}\n", language_summary.join("; ")));
         }
+        if !agent_summary.is_empty() {
+            out.push_str(&format!("  agents: {}\n", agent_summary.join("; ")));
+        }
+        out.push_str("  details: dev list | dev config show | dev agent list\n");
     }
 
     if wrote_any {
@@ -785,6 +744,88 @@ fn resolve_help_config_path(args: &[std::ffi::OsString]) -> Option<PathBuf> {
     }
 
     dirs::home_dir().map(|home| home.join(".dev").join("config.toml"))
+}
+
+fn first_task_name(cfg: &config::DevConfig) -> Option<&str> {
+    cfg.tasks
+        .as_ref()
+        .and_then(|tasks| tasks.keys().next().map(String::as_str))
+}
+
+fn summarize_languages(cfg: &config::DevConfig) -> Vec<String> {
+    cfg.languages
+        .as_ref()
+        .map(|languages| {
+            languages
+                .iter()
+                .map(|(name, language)| {
+                    let verbs = language
+                        .pipelines
+                        .as_ref()
+                        .map(pipeline_names)
+                        .unwrap_or_default();
+                    if verbs.is_empty() {
+                        format!("{name} (no pipelines)")
+                    } else {
+                        format!("{name} ({})", verbs.join(","))
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn pipeline_names(pipelines: &config::Pipelines) -> Vec<&'static str> {
+    let mut names = Vec::new();
+    if pipelines.fmt.is_some() {
+        names.push("fmt");
+    }
+    if pipelines.lint.is_some() {
+        names.push("lint");
+    }
+    if pipelines.type_check.is_some() {
+        names.push("type");
+    }
+    if pipelines.test.is_some() {
+        names.push("test");
+    }
+    if pipelines.fix.is_some() {
+        names.push("fix");
+    }
+    if pipelines.check.is_some() {
+        names.push("check");
+    }
+    if pipelines.ci.is_some() {
+        names.push("ci");
+    }
+    names
+}
+
+fn summarize_agents(cfg: &config::DevConfig) -> Vec<String> {
+    cfg.agents
+        .as_ref()
+        .map(|agents| {
+            let mut summaries = Vec::new();
+            let default_agent = cfg.default_agent.as_deref();
+            for (name, agent) in agents {
+                let adapter = agent.adapter.as_deref().unwrap_or("codex");
+                let model = agent.model.as_deref().unwrap_or("adapter-default");
+                let default_marker = if Some(name.as_str()) == default_agent {
+                    " default"
+                } else {
+                    ""
+                };
+                let iterations = agent
+                    .iterations
+                    .map(|value| format!(" x{value}"))
+                    .unwrap_or_default();
+                summaries.push(format!(
+                    "{name} ({adapter}/{model}{iterations}{default_marker})"
+                ));
+            }
+            summaries
+        })
+        .unwrap_or_default()
 }
 
 fn config_candidates(dir: &Path) -> [PathBuf; 2] {

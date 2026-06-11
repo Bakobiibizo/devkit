@@ -70,9 +70,11 @@ dev ci
 
 dev all <fmt|lint|type|test|fix|check|ci>
 
-# Help includes configured tasks, language pipelines, and agents.
+# Help summarizes first-class verbs and configured workflows.
 dev --help
 ```
+
+The first-class verbs summarize subprocess output by default. Use `dev run <task>` when you explicitly want the raw configured task output.
 
 ### Config
 
