@@ -1,11 +1,13 @@
 [package]
 name = "devkit-cli"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
+rust-version = "1.85"
 license = "MIT"
-description = "A developer workflow CLI for managing tasks, configs, and project scaffolding"
+description = "Config-driven developer workflow CLI for tasks, env files, git releases, setup, and project scaffolding"
 repository = "https://github.com/bakobiibizo/devkit"
-keywords = ["cli", "developer-tools", "workflow", "tasks"]
+readme = "../../README.md"
+keywords = ["cli", "devtools", "workflow", "scaffolding", "automation"]
 categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
@@ -29,3 +31,8 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["chrono", "serde_json"]
+
+[dev-dependencies]
+assert_cmd = "2.2"
+predicates = "3.1"
+tempfile = "3.23"

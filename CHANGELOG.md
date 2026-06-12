@@ -2,79 +2,56 @@
 
 ## Unreleased
 
+## 2026-06-12 - v0.4.0
+
+### Added
+
+- Added integration coverage for config generation/checking, task flattening, `.env` workflows, git branch flows, and version/changelog updates.
+- Added Docker Hub publishing workflow for tagged multi-arch `devkit-core` images.
+- Documented the aarch64 / GB10 inference image and `dev docker init` usage.
+- Prepared crates.io package metadata for adopter installs.
+
+### Changed
+
+- Repositioned the README for new adopters with a 60-second quick start, use cases, and the `agntctl` companion link for LLM-driven workflows.
+- Removed non-core command families from the public CLI surface so `devkit` focuses on task pipelines, env management, git/release flows, setup, Docker scaffolding, review, and walk.
+- Bumped `devkit-cli` to 0.4.0 for release preparation.
+
 ## 2026-02-06 - v0.3.1
 
-- Describe the notable changes here.
+### Added
 
+- Added Python scaffold improvements that install `uv`, `ruff`, and `mypy`.
+- Added default Python CI pipeline coverage for `pre-commit` hooks after lint, type, and test.
 
 ## 2025-12-21 - v0.3.0
 
-- Describe the notable changes here.
+### Added
 
+- Added native Markdown review reports from git diffs.
+- Added directory manifest generation for LLM-ready repository context.
+- Added system setup components for platform-aware developer machine provisioning.
+- Added Docker scaffolding and inference-oriented container workflows.
 
 ## 2025-12-14 - v0.2.2
 
-- Describe the notable changes here.
-
-
 ### Added
-- Global `--dry-run` / `--no-color` flags accepted after subcommands.
-- Git workflows: `branch-create`, `branch-finalize`, and `release-pr` now execute fetch/rebase/merge/push logic, respect dry-run, and update changelogs.
-- Version commands (`show`, `bump`, `changelog`) support semantic versioning, changelog updates, staging/commit/tag, and dry-run previews.
-- Logging initializes a tracing subscriber to enable structured logs.
-- Cargo scaffolds and deny templates now allow MPL/Unicode licenses and run `cargo +nightly udeps` by default.
-- `dev install python` now ensures `uv`, `ruff`, and `mypy` are available via `uv tool install`.
-- Python CI pipeline now runs `pre-commit` hooks by default after lint/type/test.
+
+- Added global `--dry-run` and `--no-color` flags accepted after subcommands.
+- Added git workflows for branch creation, branch finalization, and release PR preparation.
+- Added version commands for semantic version display, bumps, changelog updates, commits, and tags.
+- Added structured tracing subscriber initialization.
+- Added Cargo scaffolds and deny templates with MPL and Unicode license allowances.
 
 ### Fixed
-- Addressed cargo-udeps false positives by ignoring chrono/regex/serde_json.
+
+- Addressed cargo-udeps false positives by ignoring known runtime and serialization dependencies.
 - Prevented release PR creation when no commits exist between base and head.
-- Ensured config generation overwrites only with `--force` and summarises configs on show/check/reload.
+- Ensured config generation overwrites only with `--force`.
 - Avoided changelog writes before git status checks in release PR flow.
 
 ## 2025-10-09 - v0.1.1
 
-- Describe the notable changes here.
-## 2026-02-06 (main → release-candidate)
-
-- dev ci
-- chore(python): add pre-commit to CI pipeline
-- feat(python): install toolchain dependencies during scaffold
-- feat: auto-generate default config when missing
-- docs: add usage guide
-# Changelog
-
-## 2025-10-09 - v0.1.1
-
 ### Added
-- Global `--dry-run` / `--no-color` flags accepted after subcommands.
-- Git workflows: `branch-create`, `branch-finalize`, and `release-pr` now execute fetch/rebase/merge/push logic, respect dry-run, and update changelogs.
-- Version commands (`show`, `bump`, `changelog`) support semantic versioning, changelog updates, staging/commit/tag, and dry-run previews.
-- Logging initializes a tracing subscriber to enable structured logs.
-- Cargo scaffolds and deny templates now allow MPL/Unicode licenses and run `cargo +nightly udeps` by default.
-- `dev install python` now ensures `uv`, `ruff`, and `mypy` are available via `uv tool install`.
-- Python CI pipeline now runs `pre-commit` hooks by default after lint/type/test.
 
-### Fixed
-- Addressed cargo-udeps false positives by ignoring chrono/regex/serde_json.
-- Prevented release PR creation when no commits exist between base and head.
-- Ensured config generation overwrites only with `--force` and summarises configs on show/check/reload.
-- Avoided changelog writes before git status checks in release PR flow.
-
-## 2025-12-14 - v0.2.2
-
-- Describe the notable changes here.
-
-### Added
-- Global `--dry-run` / `--no-color` flags accepted after subcommands.
-- Git workflows: `branch-create`, `branch-finalize`, and `release-pr` now execute fetch/rebase/merge/push logic, respect dry-run, and update changelogs.
-- Version commands (`show`, `bump`, `changelog`) support semantic versioning, changelog updates, staging/commit/tag, and dry-run previews.
-- Logging initializes a tracing subscriber to enable structured logs.
-- Cargo scaffolds and deny templates now allow MPL/Unicode licenses and run `cargo +nightly udeps` by default.
-
-### Fixed
-- Addressed cargo-udeps false positives by ignoring chrono/regex/serde_json.
-- Prevented release PR creation when no commits exist between base and head.
-- Ensured config generation overwrites only with `--force` and summarises configs on show/check/reload.
-- Avoided changelog writes before git status checks in release PR flow.
-
+- Added the initial `dev` CLI for config-driven tasks, language pipelines, and project scaffolding.
