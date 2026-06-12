@@ -3,7 +3,6 @@ use std::process::{Command as ProcessCommand, Stdio};
 
 use anyhow::{Context, Result, bail};
 
-use crate::cli::SummaryCommand;
 use crate::config::DevConfig;
 use crate::core::exec::{CapturedCommandResult, format_command, run_process_captured_in_shell};
 use crate::core::output::{bounded_output, combine_output};
@@ -14,7 +13,7 @@ pub(crate) fn run_task_sequence_summarized(state: &AppState, tasks: &[String]) -
     for task in tasks {
         println!("Running summarized task `{}`", task);
         let commands = state.tasks.flatten(task)?;
-        execute_commands_summarized(state, task, &commands, false)?;
+        execute_commands_summarized(state, task, &commands)?;
     }
     Ok(())
 }
@@ -27,36 +26,10 @@ struct SummaryOptions {
     llm_command: Option<String>,
 }
 
-pub(crate) fn handle(state: &AppState, command: SummaryCommand) -> Result<()> {
-    match command {
-        SummaryCommand::Run(args) => handle_run(state, &args.task, args.raw),
-        SummaryCommand::Exec(args) => handle_exec(state, &args.argv, args.raw),
-    }
-}
-
-pub(crate) fn handle_run(state: &AppState, task: &str, raw: bool) -> Result<()> {
-    println!("Running summarized task `{}`", task);
-    let commands = state.tasks.flatten(task)?;
-    execute_commands_summarized(state, task, &commands, raw)
-}
-
-pub(crate) fn handle_exec(state: &AppState, argv: &[String], raw: bool) -> Result<()> {
-    if argv.is_empty() {
-        bail!("summary exec requires a command after `--`");
-    }
-    let spec = CommandSpec {
-        origin: "exec".to_owned(),
-        argv: argv.to_owned(),
-        allow_fail: false,
-    };
-    execute_commands_summarized(state, "exec", &[spec], raw)
-}
-
-pub(crate) fn execute_commands_summarized(
+fn execute_commands_summarized(
     state: &AppState,
     task: &str,
     commands: &[CommandSpec],
-    raw: bool,
 ) -> Result<()> {
     if commands.is_empty() {
         println!("Task `{}` has no commands.", task);
@@ -85,10 +58,6 @@ pub(crate) fn execute_commands_summarized(
         let combined = combine_output(&result.stdout, &result.stderr);
         let summary = summarize_captured_output(&render, &result, &combined, &options)?;
         println!("{}", summary);
-
-        if raw {
-            print_raw_output(&result.stdout, &result.stderr);
-        }
 
         if result.status.success() {
             println!("[ok] {} (completed in {:.2?})", render, result.elapsed);
@@ -260,13 +229,4 @@ fn local_summary(command: &str, result: &CapturedCommandResult, output: &str) ->
         }
     }
     out
-}
-
-fn print_raw_output(stdout: &str, stderr: &str) {
-    if !stdout.is_empty() {
-        println!("Raw stdout\n{}", stdout);
-    }
-    if !stderr.is_empty() {
-        println!("Raw stderr\n{}", stderr);
-    }
 }

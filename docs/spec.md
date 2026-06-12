@@ -3,7 +3,7 @@
 ## Goals
 
 - Ship one self-contained Rust binary that is easy to copy to a workstation or server.
-- Read devkit TOML config dynamically and expose configured tasks, language pipelines, agents, setup defaults, and validation rules.
+- Read devkit TOML config dynamically and expose configured tasks, language pipelines, setup defaults, and validation rules.
 - Provide uniform language verbs: `fmt`, `lint`, `type`, `test`, `fix`, `check`, and `ci`.
 - Keep core workflows non-interactive, scriptable, idempotent where possible, and dry-run aware.
 - Preserve config comments when the CLI edits TOML.
@@ -78,41 +78,20 @@ Commands:
   walk [DIR] [-o, --output <PATH>] [--format <FMT>] [--max-depth <N>] [--no-content]
        [--extensions <EXT...>] [--include-hidden]
 
-  summary run <TASK> [--raw]
-  summary exec [--raw] -- <command...>
-
-  agent run [AGENT] [--prompt <TEXT>] [--prompt-file <PATH|->] [--model <MODEL>]
-            [--cwd <PATH>] [--attach] [--iterations <N>] [--arg <ARG>...]
-  agent list
-  agent status <JOB_ID> [--tail <N>]
-
-  vault list [--account production|development]
-  vault get <ITEM> [--field <NAME>] [--account production|development]
-  vault set <ITEM> <VALUE> [--account production|development]
-  vault delete <ITEM> [--account production|development]
-
-  os show
-  os linux
-  os windows
-
-  research init [DIR] [--name <NAME>] [--package <NAME>] [--force]
-                [--skip-install] [--harness-git <URL>]
 ```
 
-`research` is hidden from top-level help but remains part of the command surface for internal research scaffolding. The first-class verbs are also hidden clap variants so dynamic help can summarize configured pipelines cleanly.
+The first-class verbs are hidden clap variants so dynamic help can summarize configured pipelines cleanly.
 
 ## Config Format
 
 Core fields:
 
 - `default_language = "rust" | "python" | "typescript" | "elixir"`
-- `default_agent = "<agent-name>"`
 - `[tasks.<name>]` with `commands = [[...], ...]` or string references to other tasks.
 - `[languages.<name>.pipelines]` mapping `fmt`, `lint`, `type`, `test`, `fix`, `check`, and `ci` to task names.
 - `[git]` for `main_branch`, `release_branch`, `version_file`, and `changelog`.
 - `[env]` for `required` and `optional` key lists.
 - `[summary]` for shell and output capture limits.
-- `[agents.<name>]` for adapter, command, cwd, model override, extra args, and loop iterations.
 - `[setup]` for default components, skipped components, and tool versions.
 
 Config discovery order:
@@ -132,7 +111,7 @@ Missing explicit or discovered config is an error. Missing home-default config i
 - Command arrays execute directly without an implicit shell.
 - Shell syntax belongs in an explicit command such as `["sh", "-lc", "..."]`.
 - Raw tasks stream output with `[ok]`, `[warn]`, and `[error]` status markers.
-- First-class verbs and summary commands capture output and print compact summaries.
+- First-class verbs capture output and print compact summaries.
 - Task execution stops on first failure unless the task marks a command as allowed to fail.
 
 ## Git Workflow
@@ -217,7 +196,6 @@ Setup components:
 - `atuin`
 - `ngrok`
 - `rm_guard`
-- `op`
 
 Dependency rules:
 
@@ -245,28 +223,9 @@ Dependency rules:
 
 `review` generates Markdown code review reports from staged diffs, working tree diffs, or branch comparison to main. `walk` generates Markdown directory manifests with file contents by default and supports extension filtering, max-depth limits, and hidden-file inclusion.
 
-## Summary And Agents
+## Verb Summaries
 
-`summary` runs configured or ad-hoc commands through the configured shell, captures bounded stdout/stderr, and prints either an LLM-generated summary or a deterministic tail summary.
-
-Agents run configured adapters:
-
-- `codex` adapter invokes Codex with the configured prompt/model/cwd.
-- `loop` adapter repeats a configured command for a bounded number of iterations.
-- Async jobs write logs and status records under the devkit job directory; `agent list` and `agent status` inspect them.
-
-## Vault
-
-Vault commands use the 1Password CLI (`op`). Account selection maps to environment tokens:
-
-- `development` → `OP_DEVELOPMENT`
-- `production` → `OP_PRODUCTION`
-
-The default account is `development`.
-
-## OS Config Overlays
-
-`os linux` and `os windows` write embedded platform templates beside the active config as `config.linux.toml` or `config.windows.toml`. Config discovery prefers the platform-specific file when present.
+First-class verbs run configured pipelines through the configured shell, capture bounded stdout/stderr, and print either an LLM-generated summary or a deterministic tail summary.
 
 ## Project Layout
 
@@ -285,23 +244,17 @@ crates/dev/
     versioning.rs
     dockergen.rs
     review.rs
-    vault.rs
     walk.rs
     templates.rs
     commands/
-      agent.rs
       config.rs
       docker.rs
       env.rs
       git.rs
       language.rs
-      os.rs
-      research.rs
       review.rs
       setup.rs
-      summary.rs
       task.rs
-      vault.rs
       version.rs
       walk.rs
     core/
@@ -309,6 +262,7 @@ crates/dev/
       exec.rs
       git.rs
       output.rs
+      summarize.rs
     scaffold/
       elixir.rs
       python.rs

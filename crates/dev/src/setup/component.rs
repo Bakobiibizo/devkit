@@ -34,7 +34,6 @@ pub enum Component {
     Atuin,
     Ngrok,
     RmGuard,
-    Op,
 }
 
 impl Component {
@@ -55,7 +54,6 @@ impl Component {
             Component::Atuin,
             Component::Ngrok,
             Component::RmGuard,
-            Component::Op,
         ]
     }
 
@@ -76,7 +74,6 @@ impl Component {
             Component::Atuin => "atuin",
             Component::Ngrok => "ngrok",
             Component::RmGuard => "rm_guard",
-            Component::Op => "op",
         }
     }
 
@@ -96,7 +93,6 @@ impl Component {
             Component::Atuin => "atuin shell history",
             Component::Ngrok => "ngrok CLI from the official apt repository",
             Component::RmGuard => "interactive rm safety function in ~/.bashrc",
-            Component::Op => "1Password CLI",
         }
     }
 
@@ -117,7 +113,6 @@ impl Component {
             "atuin" => Ok(Component::Atuin),
             "ngrok" => Ok(Component::Ngrok),
             "rm_guard" => Ok(Component::RmGuard),
-            "op" => Ok(Component::Op),
             _ => anyhow::bail!(
                 "Unknown setup component `{}`. Run `dev setup list` to see available components.",
                 s
@@ -154,7 +149,6 @@ impl Component {
             Component::Atuin => super::tools::detect_atuin(ctx),
             Component::Ngrok => super::tools::detect_ngrok(ctx),
             Component::RmGuard => super::tools::detect_rm_guard(ctx),
-            Component::Op => super::tools::detect_op(ctx),
         }
     }
 
@@ -175,7 +169,6 @@ impl Component {
             Component::Atuin => super::tools::install_atuin(ctx),
             Component::Ngrok => super::tools::install_ngrok(ctx),
             Component::RmGuard => super::tools::install_rm_guard(ctx),
-            Component::Op => super::tools::install_op(ctx),
         }
     }
 }

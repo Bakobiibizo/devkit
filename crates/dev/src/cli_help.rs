@@ -64,9 +64,8 @@ pub(crate) fn dynamic_help(args: &[std::ffi::OsString]) -> Result<Option<String>
     let mut out = String::new();
     let task_count = cfg.tasks.as_ref().map(|tasks| tasks.len()).unwrap_or(0);
     let language_summary = summarize_languages(&cfg);
-    let agent_summary = summarize_agents(&cfg);
 
-    if task_count == 0 && language_summary.is_empty() && agent_summary.is_empty() {
+    if task_count == 0 && language_summary.is_empty() {
         return Ok(None);
     }
 
@@ -83,10 +82,7 @@ pub(crate) fn dynamic_help(args: &[std::ffi::OsString]) -> Result<Option<String>
     if !language_summary.is_empty() {
         out.push_str(&format!("  languages: {}\n", language_summary.join("; ")));
     }
-    if !agent_summary.is_empty() {
-        out.push_str(&format!("  agents: {}\n", agent_summary.join("; ")));
-    }
-    out.push_str("  details: dev list | dev config show | dev agent list\n");
+    out.push_str("  details: dev list | dev config show\n");
     out.push_str(&format!("\nConfig source: {path}\n"));
     Ok(Some(out))
 }
@@ -168,33 +164,6 @@ fn pipeline_names(pipelines: &config::Pipelines) -> Vec<&'static str> {
         names.push("ci");
     }
     names
-}
-
-fn summarize_agents(cfg: &config::DevConfig) -> Vec<String> {
-    cfg.agents
-        .as_ref()
-        .map(|agents| {
-            let mut summaries = Vec::new();
-            let default_agent = cfg.default_agent.as_deref();
-            for (name, agent) in agents {
-                let adapter = agent.adapter.as_deref().unwrap_or("codex");
-                let model = agent.model.as_deref().unwrap_or("adapter-default");
-                let default_marker = if Some(name.as_str()) == default_agent {
-                    " default"
-                } else {
-                    ""
-                };
-                let iterations = agent
-                    .iterations
-                    .map(|value| format!(" x{value}"))
-                    .unwrap_or_default();
-                summaries.push(format!(
-                    "{name} ({adapter}/{model}{iterations}{default_marker})"
-                ));
-            }
-            summaries
-        })
-        .unwrap_or_default()
 }
 
 fn config_candidates(dir: &Path) -> [PathBuf; 2] {

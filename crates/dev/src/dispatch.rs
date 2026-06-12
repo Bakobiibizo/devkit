@@ -166,15 +166,10 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Version { command } => commands::version::handle(state, command),
         Command::Env(args) => commands::env::handle(state, args),
         Command::Docker { command } => commands::docker::handle(state, command),
-        Command::Research { command } => commands::research::handle(state, command),
-        Command::Vault { command } => commands::vault::handle(state, command),
-        Command::Os { command } => commands::os::handle(state, command),
         Command::Config { .. } => unreachable!("config commands handled earlier"),
         Command::Setup { .. } => unreachable!("setup commands handled earlier"),
         Command::Review { .. } => unreachable!("review commands handled earlier"),
         Command::Walk { .. } => unreachable!("walk commands handled earlier"),
-        Command::Summary { command } => commands::summary::handle(state, command),
-        Command::Agent { command } => commands::agent::handle(state, command),
         Command::External(extra) => {
             bail!("unknown command: {}", extra.join(" "))
         }

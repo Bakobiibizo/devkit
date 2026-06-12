@@ -5,9 +5,10 @@ use anyhow::{Result, anyhow, bail};
 use crate::cli::{InstallArgs, StartArgs, Verb};
 use crate::config::DevConfig;
 use crate::core::exec::{format_command, run_external_command, run_process};
+use crate::core::summarize;
 use crate::dispatch::AppState;
+use crate::scaffold;
 use crate::tasks::CommandSpec;
-use crate::{commands, scaffold};
 
 pub(crate) fn handle_list(state: &AppState) -> Result<()> {
     if state.tasks.is_empty() {
@@ -81,7 +82,7 @@ pub(crate) fn handle_verb(state: &AppState, verb: Verb) -> Result<()> {
         verb.as_str(),
         language
     );
-    commands::summary::run_task_sequence_summarized(state, &tasks)
+    summarize::run_task_sequence_summarized(state, &tasks)
 }
 
 pub(crate) fn handle_all(state: &AppState, verb: Verb) -> Result<()> {
@@ -105,7 +106,7 @@ pub(crate) fn handle_all(state: &AppState, verb: Verb) -> Result<()> {
         }
         any_ran = true;
         println!("- Language `{}`", language);
-        commands::summary::run_task_sequence_summarized(state, &tasks)?;
+        summarize::run_task_sequence_summarized(state, &tasks)?;
     }
 
     if !any_ran {

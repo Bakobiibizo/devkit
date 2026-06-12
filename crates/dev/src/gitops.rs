@@ -90,9 +90,9 @@ pub fn branch_finalize(args: &BranchFinalize, dry_run: bool, config: &DevConfig)
         ));
     }
 
-    // Push the branch first to ensure it's up to date on remote
+    let has_origin = remote_exists(DEFAULT_REMOTE)?;
     let mut steps: Vec<Vec<String>> = Vec::new();
-    if remote_exists(DEFAULT_REMOTE)? {
+    if has_origin {
         steps.push(vec![
             "git".into(),
             "fetch".into(),
@@ -100,34 +100,58 @@ pub fn branch_finalize(args: &BranchFinalize, dry_run: bool, config: &DevConfig)
             "--prune".into(),
         ]);
     }
+
+    steps.push(vec!["git".into(), "checkout".into(), base.clone()]);
+
+    if has_origin && remote_branch_exists(DEFAULT_REMOTE, &base)? {
+        steps.push(vec![
+            "git".into(),
+            "pull".into(),
+            "--rebase".into(),
+            "--autostash".into(),
+            DEFAULT_REMOTE.into(),
+            base.clone(),
+        ]);
+    }
+
     steps.push(vec![
         "git".into(),
-        "push".into(),
-        "-u".into(),
-        DEFAULT_REMOTE.into(),
+        "merge".into(),
+        "--no-ff".into(),
         branch.clone(),
-    ]);
-    steps.push(vec![
-        "gh".into(),
-        "pr".into(),
-        "create".into(),
-        "--base".into(),
-        base.clone(),
-        "--head".into(),
-        branch.clone(),
-        "--fill".into(),
+        "-m".into(),
+        format!("Merge branch `{branch}` into `{base}`"),
     ]);
 
-    // Warn if --delete was passed (deprecated, deletion now happens via GitHub)
+    if has_origin {
+        steps.push(vec![
+            "git".into(),
+            "push".into(),
+            DEFAULT_REMOTE.into(),
+            base.clone(),
+        ]);
+    }
+
     if args.delete {
-        println!(
-            "Note: --delete is deprecated. Branch deletion now happens via GitHub after PR merge."
-        );
+        steps.push(vec![
+            "git".into(),
+            "branch".into(),
+            "-d".into(),
+            branch.clone(),
+        ]);
+        if has_origin {
+            steps.push(vec![
+                "git".into(),
+                "push".into(),
+                DEFAULT_REMOTE.into(),
+                "--delete".into(),
+                branch.clone(),
+            ]);
+        }
     }
 
     run_steps(&steps, dry_run)?;
-    println!("Created PR for `{}` into `{}`.", branch, base);
-    println!("Review and merge via GitHub, then delete the branch if desired.");
+    println!("Finalized `{}` into `{}`.", branch, base);
     Ok(())
 }
 

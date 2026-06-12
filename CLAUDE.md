@@ -56,14 +56,13 @@ src/
 ├── versioning.rs    # Version bump, changelog, tagging
 ├── dockergen.rs     # Docker file generation and compose helpers
 ├── review.rs        # Git diff → markdown review overlay
-├── vault.rs         # 1Password CLI integration
 ├── walk.rs          # Directory manifests for LLM context
 ├── templates.rs     # rust-embed template handling
 ├── commands/        # Per-family handlers: task, config, env, git, setup, docker,
-│                    # review, walk, summary, agent, research, vault, os, version
-├── core/            # Shared exec, git, changelog, and output helpers
+│                    # review, walk, version
+├── core/            # Shared exec, git, changelog, output, and summarize helpers
 ├── scaffold/        # Language-specific scaffolding (rust, python, typescript, elixir)
-└── setup/           # 7 setup modules; 15 named components in setup/component.rs
+└── setup/           # 7 setup modules; 14 named components in setup/component.rs
 ```
 
 **Key patterns:**
@@ -71,7 +70,7 @@ src/
 - Tasks can reference other tasks; flattening resolves refs with cycle detection
 - Templates embedded via `rust-embed` from `templates/` directory
 - Setup components implement `detect() -> InstallState` and `install()` contract
-- Setup component names: `system_packages`, `git_lfs`, `uv`, `rustup`, `node`, `pnpm`, `pm2`, `docker`, `nvidia_container_runtime`, `cuda_toolkit_host`, `zoxide`, `atuin`, `ngrok`, `rm_guard`, `op`
+- Setup component names: `system_packages`, `git_lfs`, `uv`, `rustup`, `node`, `pnpm`, `pm2`, `docker`, `nvidia_container_runtime`, `cuda_toolkit_host`, `zoxide`, `atuin`, `ngrok`, `rm_guard`
 - Output uses `[ok]/[warn]/[error]` markers for feedback
 
 ## Config Structure

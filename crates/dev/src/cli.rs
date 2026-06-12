@@ -11,8 +11,8 @@ use crate::cli_help::{dynamic_help, should_append_dynamic_help};
     name = "dev",
     version,
     about = "Unified developer workflows",
-    long_about = "A single-binary developer workflow tool for configured tasks, language pipelines, git flows, setup, Docker, review reports, directory manifests, summarized execution, agents, vault secrets, and OS-specific config overlays.",
-    after_help = "Examples:\n  dev config generate\n  dev list\n  dev lint\n  dev run all_check\n  dev summary exec -- cargo test\n  dev git branch-create feature/docs\n  dev setup status"
+    long_about = "A single-binary developer workflow tool for configured tasks, language pipelines, git flows, setup, Docker, review reports, directory manifests, and environment management.",
+    after_help = "Examples:\n  dev config generate\n  dev list\n  dev lint\n  dev run all_check\n  dev git branch-create feature/docs\n  dev setup status"
 )]
 pub struct Cli {
     /// Change working directory before loading config or running commands.
@@ -172,22 +172,6 @@ pub enum Command {
         #[arg(long = "include-hidden")]
         include_hidden: bool,
     },
-    /// Run commands in a shell and print a compact execution summary.
-    #[command(
-        after_help = "Examples:\n  dev summary run all_check\n  dev summary exec -- cargo test --workspace\n  dev summary exec --raw -- npm test"
-    )]
-    Summary {
-        #[command(subcommand)]
-        command: SummaryCommand,
-    },
-    /// Launch configured coding agents with a prompt and model.
-    #[command(
-        after_help = "Examples:\n  dev agent run default --prompt \"Fix the failing tests\"\n  dev agent run codex-loop --iterations 3 --prompt-file task.md\n  dev agent list\n  dev agent status <job-id> --tail 120"
-    )]
-    Agent {
-        #[command(subcommand)]
-        command: AgentCommand,
-    },
     /// Docker helpers for generating base/project containers.
     #[command(
         after_help = "Examples:\n  dev docker init\n  dev docker build\n  dev docker develop\n  dev docker compose up build -d"
@@ -196,180 +180,8 @@ pub enum Command {
         #[command(subcommand)]
         command: DockerCommand,
     },
-    /// Internal research project scaffolding.
-    #[command(hide = true)]
-    #[command(
-        after_help = "Examples:\n  dev research init ./experiment --name experiment\n  dev research init --package research_bindings --skip-install"
-    )]
-    Research {
-        #[command(subcommand)]
-        command: ResearchCommand,
-    },
-    /// 1Password vault operations for managing secrets.
-    #[command(
-        after_help = "Examples:\n  dev vault list\n  dev vault get api-token --field password\n  dev vault set api-token secret --account production\n  dev vault delete api-token"
-    )]
-    Vault {
-        #[command(subcommand)]
-        command: VaultCommand,
-    },
-    /// Write platform-specific config overrides for the target host OS.
-    #[command(after_help = "Examples:\n  dev os show\n  dev os linux\n  dev os windows")]
-    Os {
-        #[command(subcommand)]
-        command: OsCommand,
-    },
     #[command(external_subcommand)]
     External(Vec<String>),
-}
-
-#[derive(Subcommand, Debug)]
-pub enum ResearchCommand {
-    /// Scaffold an isolated, project-local research workspace.
-    #[command(
-        after_help = "Examples:\n  dev research init ./lab --name lab\n  dev research init . --package lab_core --force"
-    )]
-    Init(ResearchInitArgs),
-}
-
-#[derive(Subcommand, Debug)]
-pub enum SummaryCommand {
-    /// Run a configured task and summarize captured output.
-    #[command(
-        after_help = "Examples:\n  dev summary run all_check\n  dev summary run rust_test --raw"
-    )]
-    Run(SummaryRunArgs),
-    /// Run an ad-hoc command and summarize captured output.
-    #[command(
-        after_help = "Examples:\n  dev summary exec -- cargo test --workspace\n  dev summary exec --raw -- pnpm test"
-    )]
-    Exec(SummaryExecArgs),
-}
-
-#[derive(Subcommand, Debug)]
-pub enum AgentCommand {
-    /// Run a configured agent adapter.
-    #[command(
-        after_help = "Examples:\n  dev agent run default --prompt \"Fix the failing test\"\n  dev agent run codex-loop --iterations 3 --prompt-file task.md\n  dev agent run default --attach --prompt-file -"
-    )]
-    Run(AgentRunArgs),
-    /// Show known background agent jobs.
-    #[command(after_help = "Examples:\n  dev agent list")]
-    List,
-    /// Show status and a compact log summary for a background agent job.
-    #[command(
-        after_help = "Examples:\n  dev agent status 20260612-000000-default\n  dev agent status 20260612-000000-default --tail 120"
-    )]
-    Status(AgentStatusArgs),
-}
-
-#[derive(Args, Debug)]
-pub struct AgentRunArgs {
-    /// Agent config name. Defaults to `default` or the configured default agent.
-    #[arg(default_value = "default")]
-    pub agent: String,
-
-    /// Prompt text to send to the agent.
-    #[arg(long = "prompt", short = 'p')]
-    pub prompt: Option<String>,
-
-    /// Read prompt text from a file. Use `-` to read stdin.
-    #[arg(long = "prompt-file")]
-    pub prompt_file: Option<PathBuf>,
-
-    /// Override the configured model.
-    #[arg(long = "model", short = 'm')]
-    pub model: Option<String>,
-
-    /// Override the configured working directory.
-    #[arg(long = "cwd", short = 'C')]
-    pub cwd: Option<PathBuf>,
-
-    /// Run in the foreground instead of launching an async job.
-    #[arg(long = "attach", short = 'a', default_value_t = false)]
-    pub attach: bool,
-
-    /// Override the configured loop iteration count.
-    #[arg(long = "iterations", short = 'i')]
-    pub iterations: Option<u32>,
-
-    /// Additional adapter arguments.
-    #[arg(long = "arg")]
-    pub extra_args: Vec<String>,
-}
-
-#[derive(Args, Debug)]
-pub struct AgentStatusArgs {
-    /// Job id printed by async `dev agent run`.
-    pub job_id: String,
-
-    /// Number of log lines to include.
-    #[arg(long = "tail", default_value_t = 80)]
-    pub tail: usize,
-}
-
-#[derive(Args, Debug)]
-pub struct SummaryRunArgs {
-    /// Configured task name to run.
-    pub task: String,
-
-    /// Print the raw captured output after the summary.
-    #[arg(long = "raw", default_value_t = false)]
-    pub raw: bool,
-}
-
-#[derive(Args, Debug)]
-pub struct SummaryExecArgs {
-    /// Print the raw captured output after the summary.
-    #[arg(long = "raw", default_value_t = false)]
-    pub raw: bool,
-
-    /// Command argv to execute after `--`.
-    #[arg(trailing_var_arg = true, required = true)]
-    pub argv: Vec<String>,
-}
-
-#[derive(Args, Debug)]
-pub struct ResearchInitArgs {
-    /// Target directory for the research project (default: current directory).
-    #[arg(default_value = ".")]
-    pub directory: PathBuf,
-
-    /// Project name written into project.yaml (default: directory name).
-    #[arg(long = "name")]
-    pub name: Option<String>,
-
-    /// Python package name for reusable bindings/logic.
-    #[arg(long = "package")]
-    pub package: Option<String>,
-
-    /// Overwrite scaffold files if they already exist.
-    #[arg(long = "force", default_value_t = false)]
-    pub force: bool,
-
-    /// Skip automatic harness dependency install with uv.
-    #[arg(long = "skip-install", default_value_t = false)]
-    pub skip_install: bool,
-
-    /// Git URL used to install research-harness.
-    #[arg(
-        long = "harness-git",
-        default_value = "https://github.com/hydra-dynamix/research-harness-2.git"
-    )]
-    pub harness_git: String,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum OsCommand {
-    /// Write Windows-oriented config overrides (uses npx.cmd, .cmd extensions).
-    #[command(after_help = "Examples:\n  dev os windows\n  dev --dry-run os windows")]
-    Windows,
-    /// Write Linux/macOS-oriented config overrides (uses npx, no extensions).
-    #[command(after_help = "Examples:\n  dev os linux\n  dev --dry-run os linux")]
-    Linux,
-    /// Show the detected host OS and the active override target.
-    #[command(after_help = "Examples:\n  dev os show")]
-    Show,
 }
 
 #[derive(Subcommand, Debug)]
@@ -796,55 +608,6 @@ pub enum SetupCommand {
     /// Show effective setup configuration
     #[command(after_help = "Examples:\n  dev setup config")]
     Config,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum VaultCommand {
-    /// List secrets in a vault
-    #[command(after_help = "Examples:\n  dev vault list\n  dev vault list --account production")]
-    List {
-        /// Vault to list from (production or development)
-        #[arg(long = "account", default_value = "development")]
-        account: String,
-    },
-    /// Get a secret value
-    #[command(
-        after_help = "Examples:\n  dev vault get api-token\n  dev vault get api-token --field username --account production"
-    )]
-    Get {
-        /// Secret name or path
-        item: String,
-        /// Specific field to extract
-        #[arg(long = "field")]
-        field: Option<String>,
-        /// Vault account (production or development)
-        #[arg(long = "account", default_value = "development")]
-        account: String,
-    },
-    /// Create or update a secret
-    #[command(
-        after_help = "Examples:\n  dev vault set api-token secret\n  dev vault set api-token secret --account production"
-    )]
-    Set {
-        /// Secret name
-        item: String,
-        /// Secret value
-        value: String,
-        /// Vault account (production or development)
-        #[arg(long = "account", default_value = "development")]
-        account: String,
-    },
-    /// Delete a secret
-    #[command(
-        after_help = "Examples:\n  dev vault delete api-token\n  dev vault delete api-token --account production"
-    )]
-    Delete {
-        /// Secret name
-        item: String,
-        /// Vault account (production or development)
-        #[arg(long = "account", default_value = "development")]
-        account: String,
-    },
 }
 
 /// Helper entry point so `main` can stay minimal.

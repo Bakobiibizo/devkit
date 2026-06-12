@@ -21,8 +21,6 @@ pub struct DevConfig {
     pub git: Option<GitConfig>,
     pub env: Option<EnvConfig>,
     pub summary: Option<SummaryConfig>,
-    pub default_agent: Option<String>,
-    pub agents: Option<BTreeMap<String, AgentConfig>>,
 }
 
 impl DevConfig {
@@ -36,8 +34,6 @@ impl DevConfig {
             git: None,
             env: None,
             summary: None,
-            default_agent: None,
-            agents: None,
         }
     }
 }
@@ -172,17 +168,6 @@ pub struct SummaryConfig {
     pub max_output_bytes: Option<usize>,
     pub tail_bytes: Option<usize>,
     pub llm_command: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AgentConfig {
-    pub adapter: Option<String>,
-    pub command: Option<Vec<String>>,
-    pub model: Option<String>,
-    pub cwd: Option<String>,
-    pub extra_args: Option<Vec<String>>,
-    pub prompt_prefix: Option<String>,
-    pub iterations: Option<u32>,
 }
 
 /// Load a configuration file from disk and deserialize it.

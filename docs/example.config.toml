@@ -3,34 +3,13 @@
 default_language = "rust"
 
 [summary]
-# `dev summary ...` runs commands through this shell using `-lc`.
+# First-class verbs capture output through this shell using `-lc`.
 shell = "bash"
-# Bound captured stdout/stderr before sending it to a summary command.
+# Bound captured stdout/stderr before printing a compact summary.
 max_output_bytes = 65536
 tail_bytes = 12288
 # Optional: command receives a prompt on stdin and prints the summary on stdout.
 # llm_command = "your-llm-summarizer"
-
-default_agent = "default"
-
-[agents.default]
-adapter = "codex"
-cwd = "."
-extra_args = ["--sandbox", "read-only"]
-# Optional: leave unset to use the Codex CLI default for the signed-in account.
-# model = "gpt-5"
-
-[agents.generic-example]
-adapter = "generic"
-command = ["bash", "-lc", "printf 'model=%s cwd=%s\\n' \"$DEV_AGENT_MODEL\" \"$DEV_AGENT_CWD\"; cat"]
-model = "cheap-model"
-cwd = "."
-
-[agents.codex-loop]
-adapter = "loop"
-command = ["bash", "-lc", "if [ -n \"$DEV_AGENT_MODEL\" ]; then codex exec --model \"$DEV_AGENT_MODEL\" --cd \"$DEV_AGENT_CWD\" -; else codex exec --cd \"$DEV_AGENT_CWD\" -; fi"]
-cwd = "."
-iterations = 3
 
 # ===================== Rust ========================
 
@@ -334,18 +313,6 @@ commands = ["rust_check", "py_check", "ts_check", "elixir_check"]
 [tasks.all_ci]
 # Heavier CI gate that includes extras like audit/deny/udeps and hygiene.
 commands = ["rust_ci", "py_ci", "ts_ci", "elixir_ci"]
-
-# ===================== ngrok ========================
-# Starts ngrok with GitHub OAuth credentials loaded from 1Password.
-# Requires: ~/.env with OP_PRODUCTION service account token
-# Requires: ~/.dev/scripts/ngrok-start.sh (installed by dev setup)
-# Requires: ngrok config at ~/.config/ngrok/ngrok.yml with ${GITHUB_CLIENT_ID} and ${GITHUB_CLIENT_SECRET}
-
-[tasks.ngrok]
-commands = [["bash", "-lc", '''
-pm2 delete ngrok 2>/dev/null || true
-pm2 start ~/.dev/scripts/ngrok-start.sh --name ngrok
-''']]
 
 # ===================== Git ========================
 

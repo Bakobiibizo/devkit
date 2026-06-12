@@ -30,17 +30,14 @@ Global flags:
 
 ## Command Overview
 
-There are 19 command families in the CLI enum:
+The CLI exposes the core devkit command families:
 
 - `list`, `run`, `start`, `all`
 - `install`, `language`
 - `git`, `version`
 - `env`, `config`
-- `setup`, `docker`, `os`
+- `setup`, `docker`
 - `review`, `walk`
-- `summary`, `agent`
-- `vault`
-- `research` (hidden from top-level help; internal research scaffold)
 
 The first-class verbs `fmt`, `lint`, `type`, `test`, `fix`, `check`, and `ci` are hidden clap commands normalized through the dynamic help layer and dispatch to language pipelines.
 
@@ -132,7 +129,7 @@ dev version changelog --since v1.2.0
 
 `branch-create` and `branch-finalize` resolve their base from the command flag, `[git].main_branch`, `origin/HEAD`, local `main`/`master`, then the current branch. They skip remote fetch/pull work when no `origin` remote exists. `release-pr` requires a bump level, updates version/changelog state, pushes the release branch, and uses `gh` to create the PR unless `--no-open` is set.
 
-## Setup, Docker, And OS Overrides
+## Setup And Docker
 
 ```bash
 dev setup
@@ -148,15 +145,9 @@ dev docker build
 dev docker develop
 dev docker dev --service core --no-up
 dev docker compose up build -d
-
-dev os show
-dev os linux
-dev os windows
 ```
 
-Setup has 15 named components: `system_packages`, `git_lfs`, `uv`, `rustup`, `node`, `pnpm`, `pm2`, `docker`, `nvidia_container_runtime`, `cuda_toolkit_host`, `zoxide`, `atuin`, `ngrok`, `rm_guard`, and `op`. Dependencies are resolved unless `--no-deps` is set. Docker scaffolding writes `docker/Dockerfile.core`, `docker-compose.yml`, and `.env` entries for `CORE_IMAGE`, `UID`, and `GID`.
-
-`dev os linux|windows` writes platform-specific config overlays beside the active config. The resolver prefers `.dev/config.<os>.toml` when present.
+Setup has 14 named components: `system_packages`, `git_lfs`, `uv`, `rustup`, `node`, `pnpm`, `pm2`, `docker`, `nvidia_container_runtime`, `cuda_toolkit_host`, `zoxide`, `atuin`, `ngrok`, and `rm_guard`. Dependencies are resolved unless `--no-deps` is set. Docker scaffolding writes `docker/Dockerfile.core`, `docker-compose.yml`, and `.env` entries for `CORE_IMAGE`, `UID`, and `GID`.
 
 ## Review And Walk
 
@@ -172,22 +163,9 @@ dev walk . --no-content --max-depth 4
 
 `dev review` produces a Markdown code-review overlay from staged diffs, working-tree diffs, or comparison to the main branch. `dev walk` creates an LLM-ready directory manifest and includes file contents by default.
 
-## Summary And Agents
+## Verb Summaries
 
-```bash
-dev summary run all_check
-dev summary run rust_test --raw
-dev summary exec -- cargo test --workspace
-dev summary exec --raw -- pnpm test
-
-dev agent run default --prompt "Fix the failing tests"
-dev agent run codex-loop --iterations 3 --prompt-file task.md
-dev agent run default --attach --prompt-file -
-dev agent list
-dev agent status <job-id> --tail 120
-```
-
-Configure summary behavior with `[summary]`:
+First-class verbs capture command output and print a compact summary. Configure that behavior with `[summary]`:
 
 ```toml
 [summary]
@@ -197,46 +175,6 @@ tail_bytes = 12288
 # llm_command receives a prompt on stdin and writes a summary on stdout.
 # llm_command = "your-llm-summarizer"
 ```
-
-Configure agents with `[agents.<name>]`:
-
-```toml
-default_agent = "default"
-
-[agents.default]
-adapter = "codex"
-cwd = "."
-extra_args = ["--sandbox", "read-only"]
-
-[agents.codex-loop]
-adapter = "loop"
-command = ["bash", "-lc", "codex exec --cd \"$DEV_AGENT_CWD\" -"]
-cwd = "."
-iterations = 3
-```
-
-Codex model providers belong in Codex config, not devkit config.
-
-## Vault
-
-```bash
-dev vault list
-dev vault list --account production
-dev vault get api-token --field password
-dev vault set api-token secret --account production
-dev vault delete api-token
-```
-
-Vault commands shell out to the 1Password CLI (`op`). Account tokens are read from the environment using `OP_DEVELOPMENT` or `OP_PRODUCTION`; `development` is the default account.
-
-## Research
-
-```bash
-dev research init ./experiment --name experiment
-dev research init . --package experiment_core --skip-install
-```
-
-`research` is an internal, hidden command for scaffolding a project-local research workspace with `research-harness`. It remains available for scripted use but does not appear in top-level help.
 
 ## Further Reading
 

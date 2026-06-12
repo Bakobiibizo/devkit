@@ -13,7 +13,6 @@ mod scaffold;
 mod setup;
 mod tasks;
 mod templates;
-mod vault;
 mod versioning;
 mod walk;
 
