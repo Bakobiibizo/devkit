@@ -29,7 +29,7 @@
 - Templates are embedded via `rust-embed`; installers emit `[ok]` status as they run provisioning commands.
 - `dev config` now summarises parsed config, supports `generate`, and reloads using embedded example.
 - Added `--force` overwrite option for `dev config generate` and installer streams stdout/stderr live.
-- Rust deny template now whitelists MPL-2.0 and Unicode licenses so `cargo deny check` passes by default.
+- Rust CI templates no longer require `cargo deny`; license policy checks are project-specific and should be opted into explicitly.
 - Git flows (`branch-create`, `branch-finalize`, `release-pr`) and version commands are fully implemented; logging installs a tracing subscriber on first use.
 - `dev git branch-create` now runs the documented git workflow (fetch, checkout base, pull, create branch, optional push).
 - Extended env management (2025-12): `--raw` flag, `get`, profiles (`profiles`/`switch`/`save`), validation (`check` with `[env]` config), templates (`init`/`template`), and diff/sync commands.

@@ -1,3 +1,19 @@
+[package]
+name = "devkit"
+version = "0.4.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "dev"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+devkit-cli = { path = "crates/dev" }
+
 [workspace]
 resolver = "2"
 members = [

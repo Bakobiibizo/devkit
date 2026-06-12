@@ -50,6 +50,24 @@ fn top_level_help_does_not_list_docker_command_family() {
 }
 
 #[test]
+fn update_check_with_explicit_version_is_non_networked() {
+    let temp = TempDir::new().expect("tempdir");
+
+    dev()
+        .args([
+            "-C",
+            temp.path().to_str().unwrap(),
+            "update",
+            "--check",
+            "--version",
+            env!("CARGO_PKG_VERSION"),
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("dev is up to date."));
+}
+
+#[test]
 fn config_generate_check_and_task_run_round_trip() {
     let temp = TempDir::new().expect("tempdir");
     let project = temp.path();

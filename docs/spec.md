@@ -60,6 +60,8 @@ Commands:
   version bump <major|minor|patch|prerelease> [--custom <X.Y.Z>] [--tag] [--no-commit] [--no-changelog]
   version changelog [--since <REF>] [--unreleased]
 
+  update [--check] [--version <TAG>] [--repo <OWNER/REPO>] [--install-dir <DIR>] [--yes]
+
   setup
   setup run [--skip-installed] [--no-deps] <COMPONENT...>
   setup inference <SERVICE> [--dest <PATH>] [--force] [--no-cache]
@@ -140,12 +142,20 @@ Version detection uses `git.version_file` first, then common manifests:
 
 `version bump` updates the manifest, updates changelog unless `--no-changelog` is set, commits unless `--no-commit` is set, and tags when `--tag` is passed. Changelog dates use the current local date.
 
+## Binary Distribution And Updates
+
+Tagged releases build the `dev` binary for Linux and macOS on x86_64 and aarch64. Release assets are named `dev-<tag>-<target>.tar.gz` and include a top-level `dev` executable, README, and license. A `checksums.txt` file is published beside the archives.
+
+`scripts/install.sh` is the supported curl installer. It detects OS/architecture, resolves the latest GitHub release unless `DEVKIT_VERSION` is set, downloads the matching archive, verifies `checksums.txt` when `sha256sum` is available, and installs to `DEVKIT_INSTALL_DIR` or `$HOME/.local/bin`.
+
+`dev update` uses the same release asset naming. `--check` performs a non-mutating version comparison. Installation requires `--yes` or an interactive confirmation, honors global `--dry-run`, keeps the previous binary as `dev.old`, and verifies the installed binary reports the requested version.
+
 ## Language Installers
 
 `dev install rust`:
 
 - Ensures Rust formatting/lint components are available.
-- Writes `.cargo/config.toml` and `deny.toml` templates when absent unless `--no-scaffold` is set.
+- Writes `.cargo/config.toml` when absent unless `--no-scaffold` is set.
 - Runs optional `languages.rust.install` provisioning commands.
 
 `dev install python`:

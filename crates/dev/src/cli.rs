@@ -103,6 +103,11 @@ pub enum Command {
         #[command(subcommand)]
         command: VersionCommand,
     },
+    /// Check for and install newer dev releases.
+    #[command(
+        after_help = "Examples:\n  dev update --check\n  dev update --yes\n  dev update --version v0.4.0 --install-dir ~/.local/bin"
+    )]
+    Update(UpdateArgs),
     /// Environment variable helper commands backed by a `.env` file.
     #[command(
         after_help = "Examples:\n  dev env\n  dev env --raw\n  dev env get DATABASE_URL\n  dev env add API_URL http://localhost:3000\n  dev env switch staging\n  dev env check"
@@ -355,6 +360,25 @@ pub struct ChangelogArgs {
     /// Show unreleased changes.
     #[arg(long = "unreleased")]
     pub unreleased: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct UpdateArgs {
+    /// Only check whether an update is available.
+    #[arg(long = "check", default_value_t = false)]
+    pub check: bool,
+    /// Install this release tag instead of looking up the latest release.
+    #[arg(long = "version")]
+    pub version: Option<String>,
+    /// GitHub repository to query, in owner/repo form.
+    #[arg(long = "repo", default_value = "bakobiibizo/devkit")]
+    pub repo: String,
+    /// Directory where the dev binary should be installed.
+    #[arg(long = "install-dir")]
+    pub install_dir: Option<PathBuf>,
+    /// Confirm installation without prompting.
+    #[arg(long = "yes", short = 'y', default_value_t = false)]
+    pub yes: bool,
 }
 
 #[derive(Args, Debug)]

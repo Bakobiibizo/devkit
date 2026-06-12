@@ -5,5 +5,6 @@ pub(crate) mod language;
 pub(crate) mod review;
 pub(crate) mod setup;
 pub(crate) mod task;
+pub(crate) mod update;
 pub(crate) mod version;
 pub(crate) mod walk;

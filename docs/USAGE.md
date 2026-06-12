@@ -5,10 +5,12 @@ This guide covers the `dev` command surface as implemented by `crates/dev`.
 ## Install And First Run
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/bakobiibizo/devkit/main/scripts/install.sh | sh
+# or, when developing devkit itself:
 git clone https://github.com/bakobiibizo/devkit
 cd devkit
 cargo build --workspace
-cargo install --path crates/dev
+cargo install --path .
 
 dev config generate
 dev config check
@@ -34,7 +36,7 @@ The CLI exposes the core devkit command families:
 
 - `list`, `run`, `start`, `all`
 - `install`, `language`
-- `git`, `version`
+- `git`, `version`, `update`
 - `env`, `config`
 - `setup`
 - `review`, `walk`
@@ -125,7 +127,13 @@ dev version bump minor --tag
 dev version bump patch --custom 1.2.3 --no-commit
 dev version changelog --unreleased
 dev version changelog --since v1.2.0
+
+dev update --check
+dev update --yes
+dev update --version v0.4.0 --install-dir ~/.local/bin
 ```
+
+`dev update` checks GitHub releases, downloads the matching archive for the current platform, installs to the current binary directory or `~/.local/bin`, and keeps the previous binary as `dev.old`.
 
 `branch-create` and `branch-finalize` resolve their base from the command flag, `[git].main_branch`, `origin/HEAD`, local `main`/`master`, then the current branch. They skip remote fetch/pull work when no `origin` remote exists. `release-pr` requires a bump level, updates version/changelog state, pushes the release branch, and uses `gh` to create the PR unless `--no-open` is set.
 

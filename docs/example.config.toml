@@ -40,8 +40,6 @@ commands = [["cargo", "test"]]
 [tasks.rust_audit]
 commands = [["cargo", "audit"]]
 
-[tasks.rust_deny]
-commands = [["cargo", "deny"]]
 
 [tasks.rust_udeps]
 commands = [["cargo", "+nightly", "udeps"]]
@@ -63,10 +61,9 @@ commands = [
 ]
 
 [tasks.rust_ci_extras]
-# Security, license, and dep hygiene. Safe for CI, no file writes.
+# Security and dependency hygiene. Safe for CI, no file writes.
 commands = [
   ["cargo", "audit"],
-  ["cargo", "deny", "check"],
   ["cargo", "+nightly", "udeps"]
 ]
 
@@ -238,7 +235,6 @@ commands = [
 [languages.rust]
 install = [
   ["cargo", "install", "cargo-audit"],
-  ["cargo", "install", "cargo-deny", "--version", "0.19.0", "--locked"],
   ["cargo", "install", "cargo-udeps", "--version", "0.1.56", "--locked"]
 ]
 
@@ -311,7 +307,7 @@ commands = ["rust_fix", "py_fix", "ts_fix", "elixir_fix"]
 commands = ["rust_check", "py_check", "ts_check", "elixir_check"]
 
 [tasks.all_ci]
-# Heavier CI gate that includes extras like audit/deny/udeps and hygiene.
+# Heavier CI gate that includes extras like audit/udeps and hygiene.
 commands = ["rust_ci", "py_ci", "ts_ci", "elixir_ci"]
 
 # ===================== Git ========================

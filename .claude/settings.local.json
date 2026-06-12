@@ -23,7 +23,11 @@
       "Bash(Select-Object -ExpandProperty Line)",
       "Bash(cargo fmt:*)",
       "Bash(cargo update:*)",
-      "Bash(cargo test:*)"
+      "Bash(cargo test:*)",
+      "Bash(ldgr init *)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "gargoyle"
+  ]
 }

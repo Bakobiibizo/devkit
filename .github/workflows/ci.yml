@@ -52,10 +52,30 @@ jobs:
       - name: Test
         run: cargo test --workspace --all-targets
 
+  release-artifacts:
+    name: Release artifact checks
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Validate installer script syntax
+        run: sh -n scripts/install.sh
+      - name: Build release binary package locally
+        run: |
+          cargo build -p devkit-cli --release
+          mkdir -p dist/dev-local
+          cp target/release/dev dist/dev-local/dev
+          tar -C dist/dev-local -czf dist/dev-local.tar.gz dev
+          test -s dist/dev-local.tar.gz
+
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [fmt, clippy, test]
+    needs: [fmt, clippy, test, release-artifacts]
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)

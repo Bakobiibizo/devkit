@@ -164,6 +164,7 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Language { command } => commands::language::handle(state, command),
         Command::Git { command } => commands::git::handle(state, command),
         Command::Version { command } => commands::version::handle(state, command),
+        Command::Update(args) => commands::update::handle(&state.ctx, args),
         Command::Env(args) => commands::env::handle(state, args),
         Command::Config { .. } => unreachable!("config commands handled earlier"),
         Command::Setup { .. } => unreachable!("setup commands handled earlier"),

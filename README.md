@@ -4,7 +4,13 @@
 
 ## 60-Second Quick Start
 
-Install from crates.io:
+Install a prebuilt binary with the curl installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bakobiibizo/devkit/main/scripts/install.sh | sh
+```
+
+Or install from crates.io:
 
 ```bash
 cargo install devkit-cli
@@ -31,7 +37,7 @@ dev run <task>
 Use the local checkout when developing `devkit` itself:
 
 ```bash
-cargo install --path crates/dev
+cargo install --path .
 cargo run -p devkit-cli -- --help
 ```
 
@@ -78,11 +84,13 @@ dev env get KEY
 dev env profiles
 dev env check
 
-# Git, versioning, and release prep
+# Git, versioning, release prep, and self-update
 dev git branch-create feature/example
 dev git branch-finalize --delete
 dev git release-pr patch --from main --to release-candidate
 dev version show
+dev update --check
+dev update --yes
 
 # Review and context reports
 dev review --main --output review.md
@@ -111,6 +119,16 @@ docker pull bakobiibizo/devkit-core:v0.4.0
 ```
 
 The image is built from the NGC PyTorch base and includes the build toolchain, Git/Git LFS, `uv`, cache directories for Hugging Face/Torch/uv, `nvidia-ml-py` instead of the deprecated `pynvml` package, and patched `torchaudio`/`torchvision` installs for the CUDA PyTorch stack. It is intended for aarch64 inference hosts such as GB10 / DGX Spark class machines where the host GPU stack is already provisioned.
+
+## Binary Releases And Updates
+
+Tagged releases publish `dev` archives for Linux and macOS on x86_64 and aarch64. The installer downloads the matching archive from GitHub releases, verifies `checksums.txt` when `sha256sum` is available, and installs to `$HOME/.local/bin` by default.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bakobiibizo/devkit/main/scripts/install.sh | DEVKIT_INSTALL_DIR=/usr/local/bin sh
+dev update --check
+dev update --yes
+```
 
 ## Documentation
 

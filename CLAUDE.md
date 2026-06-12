@@ -31,9 +31,8 @@ cargo check --workspace
 cargo clippy --workspace
 cargo fmt --workspace
 
-# Security/license auditing (requires tools installed)
+# Security/dependency auditing (requires tools installed)
 cargo audit
-cargo deny check
 cargo +nightly udeps
 ```
 
