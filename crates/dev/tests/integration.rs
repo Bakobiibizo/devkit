@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::Command;
 
 use assert_cmd::cargo::cargo_bin_cmd;
+use predicates::prelude::PredicateBooleanExt;
 use tempfile::TempDir;
 
 fn dev() -> assert_cmd::Command {
@@ -35,6 +36,17 @@ fn init_repo(dir: &Path) {
     run_git(dir, &["init", "-b", "main"]);
     run_git(dir, &["config", "user.email", "devkit@example.invalid"]);
     run_git(dir, &["config", "user.name", "Devkit Tests"]);
+}
+
+#[test]
+fn top_level_help_does_not_list_docker_command_family() {
+    dev()
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("Commands:"))
+        .stdout(predicates::str::contains("  docker").not())
+        .stdout(predicates::str::contains("Docker helpers").not());
 }
 
 #[test]

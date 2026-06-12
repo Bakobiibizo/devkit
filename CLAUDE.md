@@ -54,11 +54,10 @@ src/
 ├── envfile.rs       # .env file read/write with profile support
 ├── gitops.rs        # Git branch workflows, release PRs
 ├── versioning.rs    # Version bump, changelog, tagging
-├── dockergen.rs     # Docker file generation and compose helpers
 ├── review.rs        # Git diff → markdown review overlay
 ├── walk.rs          # Directory manifests for LLM context
 ├── templates.rs     # rust-embed template handling
-├── commands/        # Per-family handlers: task, config, env, git, setup, docker,
+├── commands/        # Per-family handlers: task, config, env, git, setup,
 │                    # review, walk, version
 ├── core/            # Shared exec, git, changelog, output, and summarize helpers
 ├── scaffold/        # Language-specific scaffolding (rust, python, typescript, elixir)

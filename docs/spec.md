@@ -68,12 +68,6 @@ Commands:
   setup list
   setup config
 
-  docker init [--force] [--base-image <REF>] [--service <NAME>]
-  docker build [--image <REF>]
-  docker compose up build [-d|--detach]
-  docker develop [--service <NAME>] [--no-up]
-  docker dev ...                    Alias for docker develop
-
   review [--output <PATH>] [--include-working] [--main]
   walk [DIR] [-o, --output <PATH>] [--format <FMT>] [--max-depth <N>] [--no-content]
        [--extensions <EXT...>] [--include-hidden]
@@ -209,16 +203,6 @@ Dependency rules:
 
 `setup inference <service>` clones or updates `https://github.com/bakobiibizo/dev-<service>.git`, strips explicit Compose `container_name:` entries to avoid collisions, and runs `scripts/setup.sh`.
 
-## Docker
-
-`docker init` writes:
-
-- `docker/Dockerfile.core`
-- `docker-compose.yml`
-- `.env` entries for `CORE_IMAGE`, `UID`, and `GID`
-
-`docker build` builds `docker/Dockerfile.core` using `CORE_IMAGE` from `.env` unless `--image` is passed. `docker develop` runs compose startup unless `--no-up` is set and then opens an interactive shell in the chosen service.
-
 ## Review And Walk
 
 `review` generates Markdown code review reports from staged diffs, working tree diffs, or branch comparison to main. `walk` generates Markdown directory manifests with file contents by default and supports extension filtering, max-depth limits, and hidden-file inclusion.
@@ -242,13 +226,11 @@ crates/dev/
     envfile.rs
     gitops.rs
     versioning.rs
-    dockergen.rs
     review.rs
     walk.rs
     templates.rs
     commands/
       config.rs
-      docker.rs
       env.rs
       git.rs
       language.rs

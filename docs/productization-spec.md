@@ -24,7 +24,7 @@ The accumulated personal tooling moves out:
 
 What remains is the adoptable core: config-driven tasks and language
 pipelines, env management, git/release flows, versioning, scaffolding,
-setup components, docker scaffolding, review/walk.
+setup components, review/walk, and the published GPU container image.
 
 ## Work blocks
 
@@ -53,7 +53,7 @@ setup components, docker scaffolding, review/walk.
   them before the first tagged release).
 - Add a README section targeting aarch64/GB10 users: what the image contains
   (NGC PyTorch base, build toolchain, uv, patched pynvml/torchaudio/
-  torchvision), how to pull and use it with `dev docker init` / compose.
+  torchvision), and how to pull it.
 - Acceptance: workflow is valid (actionlint or careful review), README
   documents pull + usage; no secrets committed.
 

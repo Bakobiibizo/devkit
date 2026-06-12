@@ -1,6 +1,6 @@
 # devkit
 
-`devkit` provides the `dev` CLI: a small, config-driven command runner for repeatable project workflows. It gives a repository one place to define tasks, language pipelines, `.env` handling, git/release steps, setup components, Docker scaffolding, and review/context reports, while keeping the day-to-day interface short enough to remember.
+`devkit` provides the `dev` CLI: a small, config-driven command runner for repeatable project workflows. It gives a repository one place to define tasks, language pipelines, `.env` handling, git/release steps, setup components, and review/context reports, while keeping the day-to-day interface short enough to remember.
 
 ## 60-Second Quick Start
 
@@ -45,7 +45,7 @@ It is a good fit for:
 - projects that need consistent `fmt`, `lint`, `type`, `test`, `check`, `ci`, or custom task verbs;
 - teams that want `.env` profile management, validation, templates, diffs, and sync helpers;
 - release flows that benefit from scripted branch, version, changelog, and release-PR commands;
-- machines that need repeatable developer setup or Docker project scaffolding;
+- machines that need repeatable developer setup;
 - LLM-assisted code review where `dev review` and `dev walk` generate bounded Markdown context.
 
 For LLM tool loops that need compact summaries of noisy commands or detached agent runs, use [`agntctl`](https://crates.io/crates/agntctl) alongside `devkit`. `devkit` owns the project workflow surface; `agntctl` owns bounded command and agent reports.
@@ -91,7 +91,7 @@ dev walk crates/dev -o manifest.md --extensions .rs .toml
 
 `dev run <task>` streams the configured command directly. First-class verbs such as `dev test` capture noisy output and print a compact status summary.
 
-## Setup And Docker
+## Setup And GPU Image
 
 `dev setup` installs repeatable host components from config, with dry-run support and idempotent detection:
 
@@ -103,15 +103,6 @@ dev setup run rustup uv docker
 dev setup all --skip-installed
 ```
 
-`dev docker` creates and operates project container scaffolds:
-
-```bash
-dev docker init
-dev docker build
-dev docker compose up build -d
-dev docker develop
-```
-
 Tagged releases publish a multi-arch Docker image for `linux/amd64` and `linux/arm64`:
 
 ```bash
@@ -120,14 +111,6 @@ docker pull bakobiibizo/devkit-core:v0.4.0
 ```
 
 The image is built from the NGC PyTorch base and includes the build toolchain, Git/Git LFS, `uv`, cache directories for Hugging Face/Torch/uv, `nvidia-ml-py` instead of the deprecated `pynvml` package, and patched `torchaudio`/`torchvision` installs for the CUDA PyTorch stack. It is intended for aarch64 inference hosts such as GB10 / DGX Spark class machines where the host GPU stack is already provisioned.
-
-Use the published image as a project base:
-
-```bash
-dev docker init --base-image bakobiibizo/devkit-core:v0.4.0
-dev docker compose up build -d
-dev docker develop
-```
 
 ## Documentation
 

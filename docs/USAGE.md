@@ -36,7 +36,7 @@ The CLI exposes the core devkit command families:
 - `install`, `language`
 - `git`, `version`
 - `env`, `config`
-- `setup`, `docker`
+- `setup`
 - `review`, `walk`
 
 The first-class verbs `fmt`, `lint`, `type`, `test`, `fix`, `check`, and `ci` are hidden clap commands normalized through the dynamic help layer and dispatch to language pipelines.
@@ -129,7 +129,7 @@ dev version changelog --since v1.2.0
 
 `branch-create` and `branch-finalize` resolve their base from the command flag, `[git].main_branch`, `origin/HEAD`, local `main`/`master`, then the current branch. They skip remote fetch/pull work when no `origin` remote exists. `release-pr` requires a bump level, updates version/changelog state, pushes the release branch, and uses `gh` to create the PR unless `--no-open` is set.
 
-## Setup And Docker
+## Setup And GPU Image
 
 ```bash
 dev setup
@@ -139,15 +139,16 @@ dev setup config
 dev setup run rustup uv docker --skip-installed
 dev setup all --skip-installed
 dev setup inference comfyui --dest ~/repos/inference/dev-comfyui
-
-dev docker init
-dev docker build
-dev docker develop
-dev docker dev --service core --no-up
-dev docker compose up build -d
 ```
 
-Setup has 14 named components: `system_packages`, `git_lfs`, `uv`, `rustup`, `node`, `pnpm`, `pm2`, `docker`, `nvidia_container_runtime`, `cuda_toolkit_host`, `zoxide`, `atuin`, `ngrok`, and `rm_guard`. Dependencies are resolved unless `--no-deps` is set. Docker scaffolding writes `docker/Dockerfile.core`, `docker-compose.yml`, and `.env` entries for `CORE_IMAGE`, `UID`, and `GID`.
+Setup has 14 named components: `system_packages`, `git_lfs`, `uv`, `rustup`, `node`, `pnpm`, `pm2`, `docker`, `nvidia_container_runtime`, `cuda_toolkit_host`, `zoxide`, `atuin`, `ngrok`, and `rm_guard`. Dependencies are resolved unless `--no-deps` is set.
+
+Tagged releases publish the `bakobiibizo/devkit-core` Docker image for GPU-oriented inference hosts:
+
+```bash
+docker pull bakobiibizo/devkit-core:latest
+docker pull bakobiibizo/devkit-core:v0.4.0
+```
 
 ## Review And Walk
 

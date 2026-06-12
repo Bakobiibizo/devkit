@@ -165,7 +165,6 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Git { command } => commands::git::handle(state, command),
         Command::Version { command } => commands::version::handle(state, command),
         Command::Env(args) => commands::env::handle(state, args),
-        Command::Docker { command } => commands::docker::handle(state, command),
         Command::Config { .. } => unreachable!("config commands handled earlier"),
         Command::Setup { .. } => unreachable!("setup commands handled earlier"),
         Command::Review { .. } => unreachable!("review commands handled earlier"),

@@ -11,7 +11,7 @@ use crate::cli_help::{dynamic_help, should_append_dynamic_help};
     name = "dev",
     version,
     about = "Unified developer workflows",
-    long_about = "A single-binary developer workflow tool for configured tasks, language pipelines, git flows, setup, Docker, review reports, directory manifests, and environment management.",
+    long_about = "A single-binary developer workflow tool for configured tasks, language pipelines, git flows, setup, review reports, directory manifests, and environment management.",
     after_help = "Examples:\n  dev config generate\n  dev list\n  dev lint\n  dev run all_check\n  dev git branch-create feature/docs\n  dev setup status"
 )]
 pub struct Cli {
@@ -172,104 +172,8 @@ pub enum Command {
         #[arg(long = "include-hidden")]
         include_hidden: bool,
     },
-    /// Docker helpers for generating base/project containers.
-    #[command(
-        after_help = "Examples:\n  dev docker init\n  dev docker build\n  dev docker develop\n  dev docker compose up build -d"
-    )]
-    Docker {
-        #[command(subcommand)]
-        command: DockerCommand,
-    },
     #[command(external_subcommand)]
     External(Vec<String>),
-}
-
-#[derive(Subcommand, Debug)]
-pub enum DockerCommand {
-    /// Generate docker/Dockerfile.core, docker-compose.yml, and .env for the current project.
-    #[command(
-        after_help = "Examples:\n  dev docker init\n  dev docker init --base-image nvcr.io/nvidia/pytorch:25.09-py3 --service core"
-    )]
-    Init(DockerInitArgs),
-    /// Build docker/Dockerfile.core into the configured CORE_IMAGE tag.
-    #[command(
-        after_help = "Examples:\n  dev docker build\n  dev docker build --image registry.example.com/devkit:cuda"
-    )]
-    Build(DockerBuildArgs),
-    /// Docker compose helpers.
-    #[command(
-        after_help = "Examples:\n  dev docker compose up build\n  dev docker compose up build -d"
-    )]
-    Compose {
-        #[command(subcommand)]
-        command: DockerComposeCommand,
-    },
-    /// Start the compose service (build if needed) and open an interactive shell inside it.
-    #[command(alias = "dev")]
-    #[command(
-        after_help = "Examples:\n  dev docker develop\n  dev docker dev --service core\n  dev docker develop --no-up"
-    )]
-    Develop(DockerDevelopArgs),
-}
-
-#[derive(Args, Debug)]
-pub struct DockerDevelopArgs {
-    /// Compose service name (default: core)
-    #[arg(long = "service", default_value = "core")]
-    pub service: String,
-
-    /// Skip `docker compose up -d --build` and only exec a shell
-    #[arg(long = "no-up", default_value_t = false)]
-    pub no_up: bool,
-}
-
-#[derive(Args, Debug)]
-pub struct DockerBuildArgs {
-    /// Override the tag to build (defaults to CORE_IMAGE from .env)
-    #[arg(long = "image")]
-    pub image: Option<String>,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum DockerComposeCommand {
-    Up {
-        #[command(subcommand)]
-        command: DockerComposeUpCommand,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-pub enum DockerComposeUpCommand {
-    /// Run `docker compose up --build`
-    #[command(
-        after_help = "Examples:\n  dev docker compose up build\n  dev docker compose up build --detach"
-    )]
-    Build(DockerComposeUpBuildArgs),
-}
-
-#[derive(Args, Debug)]
-pub struct DockerComposeUpBuildArgs {
-    /// Run in the background
-    #[arg(short = 'd', long = "detach", default_value_t = false)]
-    pub detach: bool,
-}
-
-#[derive(Args, Debug)]
-pub struct DockerInitArgs {
-    /// Overwrite existing files
-    #[arg(long = "force", default_value_t = false)]
-    pub force: bool,
-
-    /// Base image to use in docker/Dockerfile.core
-    #[arg(
-        long = "base-image",
-        default_value = "nvcr.io/nvidia/pytorch:25.09-py3"
-    )]
-    pub base_image: String,
-
-    /// Compose service name (default: core)
-    #[arg(long = "service", default_value = "core")]
-    pub service: String,
 }
 
 /// Shared verb enumeration for consistent handling across languages.

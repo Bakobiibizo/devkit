@@ -4,7 +4,6 @@ mod commands;
 mod config;
 mod core;
 mod dispatch;
-mod dockergen;
 mod envfile;
 mod gitops;
 mod logging;

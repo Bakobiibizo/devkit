@@ -1,5 +1,4 @@
 pub(crate) mod config;
-pub(crate) mod docker;
 pub(crate) mod env;
 pub(crate) mod git;
 pub(crate) mod language;
