@@ -1,51 +1,64 @@
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use camino::Utf8Path;
-use std::process::Command;
 
 const DEFAULT_BASE_BRANCH: &str = "release-candidate";
 const DEFAULT_MAIN_BRANCH: &str = "main";
+const DEFAULT_REMOTE: &str = "origin";
 
 use crate::cli::{BranchCreate, BranchFinalize, ReleasePr};
 use crate::config::DevConfig;
+use crate::core::changelog::prepend_release_section;
+use crate::core::git::{
+    collect_commit_subjects, current_branch, ensure_clean_worktree, local_branch_exists,
+    remote_branch_exists, remote_default_branch, remote_exists, run_steps,
+};
 use crate::versioning;
 
-pub fn branch_create(args: &BranchCreate, dry_run: bool) -> Result<()> {
+pub fn branch_create(args: &BranchCreate, dry_run: bool, config: &DevConfig) -> Result<()> {
     if !args.allow_dirty && !dry_run {
         ensure_clean_worktree()?;
     }
 
-    let base = args.base.as_deref().unwrap_or(DEFAULT_BASE_BRANCH);
-    let mut steps: Vec<Vec<String>> = vec![
-        vec![
+    let base = resolve_workflow_base(args.base.as_deref(), config)?;
+    let has_origin = remote_exists(DEFAULT_REMOTE)?;
+    let mut steps: Vec<Vec<String>> = Vec::new();
+
+    if has_origin {
+        steps.push(vec![
             "git".into(),
             "fetch".into(),
             "--all".into(),
             "--prune".into(),
-        ],
-        vec!["git".into(), "checkout".into(), base.into()],
-        vec![
+        ]);
+    }
+
+    steps.push(vec!["git".into(), "checkout".into(), base.clone()]);
+
+    if has_origin && remote_branch_exists(DEFAULT_REMOTE, &base)? {
+        steps.push(vec![
             "git".into(),
             "pull".into(),
             "--rebase".into(),
             "--autostash".into(),
-            "origin".into(),
-            base.into(),
-        ],
-        vec![
-            "git".into(),
-            "checkout".into(),
-            "-B".into(),
-            args.name.clone(),
-            base.into(),
-        ],
-    ];
+            DEFAULT_REMOTE.into(),
+            base.clone(),
+        ]);
+    }
+
+    steps.push(vec![
+        "git".into(),
+        "checkout".into(),
+        "-B".into(),
+        args.name.clone(),
+        base.clone(),
+    ]);
 
     if args.push {
         steps.push(vec![
             "git".into(),
             "push".into(),
             "--set-upstream".into(),
-            "origin".into(),
+            DEFAULT_REMOTE.into(),
             args.name.clone(),
         ]);
     }
@@ -60,7 +73,7 @@ pub fn branch_create(args: &BranchCreate, dry_run: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn branch_finalize(args: &BranchFinalize, dry_run: bool) -> Result<()> {
+pub fn branch_finalize(args: &BranchFinalize, dry_run: bool, config: &DevConfig) -> Result<()> {
     if !args.allow_dirty && !dry_run {
         ensure_clean_worktree()?;
     }
@@ -69,34 +82,41 @@ pub fn branch_finalize(args: &BranchFinalize, dry_run: bool) -> Result<()> {
         Some(name) => name.clone(),
         None => current_branch()?.ok_or_else(|| anyhow!("unable to determine current branch"))?,
     };
-    let base = args.base.as_deref().unwrap_or(DEFAULT_BASE_BRANCH);
+    let base = resolve_workflow_base(args.base.as_deref(), config)?;
+    if branch == base {
+        return Err(anyhow!(
+            "cannot finalize `{}` into itself; checkout a feature branch or pass --into <base>",
+            branch
+        ));
+    }
 
     // Push the branch first to ensure it's up to date on remote
-    let steps: Vec<Vec<String>> = vec![
-        vec![
+    let mut steps: Vec<Vec<String>> = Vec::new();
+    if remote_exists(DEFAULT_REMOTE)? {
+        steps.push(vec![
             "git".into(),
             "fetch".into(),
             "--all".into(),
             "--prune".into(),
-        ],
-        vec![
-            "git".into(),
-            "push".into(),
-            "-u".into(),
-            "origin".into(),
-            branch.clone(),
-        ],
-        vec![
-            "gh".into(),
-            "pr".into(),
-            "create".into(),
-            "--base".into(),
-            base.into(),
-            "--head".into(),
-            branch.clone(),
-            "--fill".into(),
-        ],
-    ];
+        ]);
+    }
+    steps.push(vec![
+        "git".into(),
+        "push".into(),
+        "-u".into(),
+        DEFAULT_REMOTE.into(),
+        branch.clone(),
+    ]);
+    steps.push(vec![
+        "gh".into(),
+        "pr".into(),
+        "create".into(),
+        "--base".into(),
+        base.clone(),
+        "--head".into(),
+        branch.clone(),
+        "--fill".into(),
+    ]);
 
     // Warn if --delete was passed (deprecated, deletion now happens via GitHub)
     if args.delete {
@@ -109,6 +129,34 @@ pub fn branch_finalize(args: &BranchFinalize, dry_run: bool) -> Result<()> {
     println!("Created PR for `{}` into `{}`.", branch, base);
     println!("Review and merge via GitHub, then delete the branch if desired.");
     Ok(())
+}
+
+fn resolve_workflow_base(explicit_base: Option<&str>, config: &DevConfig) -> Result<String> {
+    if let Some(base) = explicit_base {
+        return Ok(base.to_owned());
+    }
+
+    if let Some(base) = config
+        .git
+        .as_ref()
+        .and_then(|git| git.main_branch.as_deref())
+    {
+        return Ok(base.to_owned());
+    }
+
+    if let Some(base) = remote_default_branch(DEFAULT_REMOTE)? {
+        return Ok(base);
+    }
+
+    for candidate in ["main", "master"] {
+        if local_branch_exists(candidate)? {
+            return Ok(candidate.to_owned());
+        }
+    }
+
+    current_branch()?.ok_or_else(|| {
+        anyhow!("unable to determine a base branch; pass --from/--into or set [git].main_branch")
+    })
 }
 
 pub fn release_pr(args: &ReleasePr, dry_run: bool, config: &DevConfig) -> Result<()> {
@@ -231,76 +279,9 @@ pub fn release_pr(args: &ReleasePr, dry_run: bool, config: &DevConfig) -> Result
     Ok(())
 }
 
-fn run_steps(steps: &[Vec<String>], dry_run: bool) -> Result<()> {
-    for step in steps {
-        let display = step.join(" ");
-        if dry_run {
-            println!("[dry-run] {}", display);
-            continue;
-        }
-        if step.is_empty() {
-            continue;
-        }
-        let status = Command::new(&step[0])
-            .args(&step[1..])
-            .status()
-            .with_context(|| format!("running `{}`", display))?;
-        if !status.success() {
-            let code = status.code().unwrap_or(-1);
-            bail!("command `{}` failed with status {}", display, code);
-        }
-    }
-    Ok(())
-}
-
-fn ensure_clean_worktree() -> Result<()> {
-    let output = Command::new("git")
-        .args(["status", "--porcelain"])
-        .output()
-        .context("checking git status")?;
-    if !output.status.success() {
-        bail!("git status --porcelain exited with {}", output.status);
-    }
-    if !output.stdout.is_empty() {
-        return Err(anyhow!(
-            "working tree has uncommitted changes; pass --allow-dirty to override"
-        ));
-    }
-    Ok(())
-}
-
-fn current_branch() -> Result<Option<String>> {
-    let output = Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .output()
-        .context("determining current branch")?;
-    if !output.status.success() {
-        let code = output.status.code().unwrap_or(-1);
-        bail!("git rev-parse failed with status {}", code);
-    }
-    let branch = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    if branch == "HEAD" {
-        return Ok(None);
-    }
-    Ok(Some(branch))
-}
-
 fn collect_commits(base: &str, head: &str) -> Result<Vec<String>> {
     let range = format!("{}..{}", base, head);
-    let output = Command::new("git")
-        .args(["log", &range, "--pretty=format:%s"])
-        .output()
-        .with_context(|| format!("collecting commits for {}", range))?;
-    if !output.status.success() {
-        let code = output.status.code().unwrap_or(-1);
-        bail!("git log failed with status {}", code);
-    }
-    let commits = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    Ok(commits)
+    collect_commit_subjects(&range)
 }
 
 fn update_release_changelog(
@@ -310,9 +291,6 @@ fn update_release_changelog(
     dry_run: bool,
 ) -> Result<()> {
     use chrono::Utc;
-    use std::fs;
-    use std::io::Write;
-
     let date = Utc::now().format("%Y-%m-%d");
     let mut section = format!("## {} - v{}\n\n", date, version);
     for commit in commits {
@@ -327,28 +305,5 @@ fn update_release_changelog(
         return Ok(());
     }
 
-    let mut content = if path.exists() {
-        fs::read_to_string(path).with_context(|| format!("reading {}", path))?
-    } else {
-        String::from("# Changelog\n\n## Unreleased\n\n")
-    };
-
-    if let Some(idx) = content.find("## Unreleased") {
-        let insert_at = content[idx..]
-            .find('\n')
-            .map(|offset| idx + offset + 1)
-            .unwrap_or(content.len());
-        content.insert_str(insert_at, &format!("\n{}", section));
-    } else {
-        if !content.ends_with('\n') {
-            content.push('\n');
-        }
-        content.push_str(&section);
-    }
-
-    let mut file =
-        fs::File::create(path.as_std_path()).with_context(|| format!("opening {}", path))?;
-    file.write_all(content.as_bytes())
-        .with_context(|| format!("writing {}", path))?;
-    Ok(())
+    prepend_release_section(path, &section)
 }

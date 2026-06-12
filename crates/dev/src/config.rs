@@ -25,6 +25,23 @@ pub struct DevConfig {
     pub agents: Option<BTreeMap<String, AgentConfig>>,
 }
 
+impl DevConfig {
+    pub fn empty() -> Self {
+        Self {
+            default_language: None,
+            default_project: None,
+            projects: None,
+            tasks: None,
+            languages: None,
+            git: None,
+            env: None,
+            summary: None,
+            default_agent: None,
+            agents: None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TaskUpdateMode {
     Overwrite,
