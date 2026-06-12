@@ -87,6 +87,15 @@ setup components, docker scaffolding, review/walk.
 P2-1 first (smallest surface for everything after), then P2-3 (tests guard
 the now-final core), P2-2 and P2-4 last in either order.
 
+## Scope changes
+
+- 2026-06-12 (post P2 completion): user decided the `docker` command family
+  also leaves the CLI. The GPU container image itself remains published from
+  this repo (`build/docker/Dockerfile.core` + the docker-publish workflow) —
+  it is useful standalone for aarch64/GB10 inference setups — but `dev
+  docker`, `dockergen.rs`, and the docker scaffolding templates are removed.
+  Tracked as work item `remove-docker-family`.
+
 ## Out of scope
 
 - agntctl implementation (tracked in its own repo at `/mnt/d/apps/agntctl`).
