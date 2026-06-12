@@ -1,0 +1,15 @@
+pub(crate) mod agent;
+pub(crate) mod config;
+pub(crate) mod docker;
+pub(crate) mod env;
+pub(crate) mod git;
+pub(crate) mod language;
+pub(crate) mod os;
+pub(crate) mod research;
+pub(crate) mod review;
+pub(crate) mod setup;
+pub(crate) mod summary;
+pub(crate) mod task;
+pub(crate) mod vault;
+pub(crate) mod version;
+pub(crate) mod walk;

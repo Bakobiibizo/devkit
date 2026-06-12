@@ -1,4 +1,4 @@
-use std::{fs, io::Write, process::Command};
+use std::fs;
 
 use anyhow::{Context, Result, anyhow, bail};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -9,6 +9,10 @@ use toml_edit::{DocumentMut, value};
 use crate::{
     cli::{BumpLevel, ChangelogArgs, VersionBump, VersionCommand},
     config::DevConfig,
+    core::{
+        changelog::prepend_release_section,
+        git::{collect_commit_subjects, latest_tag, run_git},
+    },
 };
 
 /// Result of a version bump operation.
@@ -125,13 +129,13 @@ fn print_changelog(_config: &DevConfig, args: &ChangelogArgs) -> Result<()> {
     let range = if let Some(since) = &args.since {
         format!("{}..HEAD", since)
     } else if args.unreleased {
-        let tag = latest_tag()?.unwrap_or_else(|| "HEAD^".to_string());
+        let tag = latest_tag().unwrap_or_else(|| "HEAD^".to_string());
         format!("{}..HEAD", tag)
     } else {
         format!("{}..HEAD", DEFAULT_BASE_BRANCH)
     };
 
-    let commits = collect_commits(&range)?;
+    let commits = collect_commit_subjects(&range)?;
     if commits.is_empty() {
         println!("No commits for range {}", range);
     } else {
@@ -403,29 +407,7 @@ fn update_changelog(path: &Utf8Path, version: &Version, dry_run: bool) -> Result
         return Ok(());
     }
 
-    let mut content = if path.exists() {
-        fs::read_to_string(path).with_context(|| format!("reading {}", path))?
-    } else {
-        String::from("# Changelog\n\n## Unreleased\n\n")
-    };
-
-    if let Some(idx) = content.find("## Unreleased") {
-        let insert_at = content[idx..]
-            .find('\n')
-            .map(|offset| idx + offset + 1)
-            .unwrap_or(content.len());
-        content.insert_str(insert_at, &format!("\n{}", section));
-    } else {
-        if !content.ends_with('\n') {
-            content.push('\n');
-        }
-        content.push_str(&section);
-    }
-
-    let mut file = fs::File::create(path).with_context(|| format!("opening {}", path))?;
-    file.write_all(content.as_bytes())
-        .with_context(|| format!("writing {}", path))?;
-    Ok(())
+    prepend_release_section(path, &section)
 }
 
 pub fn changelog_path(config: &DevConfig) -> Result<Option<Utf8PathBuf>> {
@@ -467,53 +449,6 @@ fn git_commit(message: &str, dry_run: bool) -> Result<()> {
 
 fn git_tag(tag: &str, dry_run: bool) -> Result<()> {
     run_git(&["tag".into(), tag.into()], dry_run)
-}
-
-fn run_git(args: &[String], dry_run: bool) -> Result<()> {
-    if dry_run {
-        let display = format!("git {}", args.join(" "));
-        println!("[dry-run] {}", display);
-        return Ok(());
-    }
-
-    let status = Command::new("git")
-        .args(args)
-        .status()
-        .with_context(|| format!("running git {}", args.join(" ")))?;
-    if !status.success() {
-        let code = status.code().unwrap_or(-1);
-        bail!("git command failed with status {}", code);
-    }
-    Ok(())
-}
-
-fn collect_commits(range: &str) -> Result<Vec<String>> {
-    let output = Command::new("git")
-        .args(["log", range, "--pretty=format:%s"])
-        .output()
-        .with_context(|| format!("collecting commits for {}", range))?;
-    if !output.status.success() {
-        let code = output.status.code().unwrap_or(-1);
-        bail!("git log failed with status {}", code);
-    }
-    let commits = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(|line| line.trim().to_owned())
-        .filter(|line| !line.is_empty())
-        .collect();
-    Ok(commits)
-}
-
-fn latest_tag() -> Result<Option<String>> {
-    let output = Command::new("git")
-        .args(["describe", "--tags", "--abbrev=0"])
-        .output();
-    match output {
-        Ok(out) if out.status.success() => Ok(Some(
-            String::from_utf8_lossy(&out.stdout).trim().to_string(),
-        )),
-        _ => Ok(None),
-    }
 }
 
 #[derive(Clone, Copy)]

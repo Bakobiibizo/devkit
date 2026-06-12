@@ -7,6 +7,13 @@ use crate::templates;
 use anyhow::{Result, bail};
 use camino::Utf8Path;
 
+pub fn is_supported_language(language: &str) -> bool {
+    matches!(
+        language,
+        "elixir" | "ex" | "rust" | "python" | "typescript" | "ts"
+    )
+}
+
 pub fn install(language: &str, force: bool) -> Result<()> {
     match language {
         "elixir" | "ex" => elixir::install(force),
