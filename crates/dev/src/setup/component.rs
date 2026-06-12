@@ -17,14 +17,6 @@ pub enum InstallState {
     },
 }
 
-/// Installation mode
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-pub enum InstallMode {
-    Apply,
-    DryRun,
-}
-
 /// All available setup components
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Component {
@@ -88,6 +80,26 @@ impl Component {
         }
     }
 
+    pub fn description(&self) -> &'static str {
+        match self {
+            Component::SystemPackages => "APT build tools and common native libraries",
+            Component::GitLfs => "Git LFS initialization",
+            Component::Uv => "Astral uv Python package manager",
+            Component::Rustup => "Rust toolchain installer",
+            Component::Node => "Node.js through nvm",
+            Component::Pnpm => "pnpm package manager",
+            Component::Pm2 => "PM2 plus devkit systemd resurrection service",
+            Component::Docker => "Docker Engine and user permissions",
+            Component::NvidiaContainerRuntime => "NVIDIA Container Toolkit for Docker",
+            Component::CudaToolkitHost => "Host CUDA validation; install is opt-in/protective",
+            Component::Zoxide => "zoxide directory jumper",
+            Component::Atuin => "atuin shell history",
+            Component::Ngrok => "ngrok CLI from the official apt repository",
+            Component::RmGuard => "interactive rm safety function in ~/.bashrc",
+            Component::Op => "1Password CLI",
+        }
+    }
+
     /// Parse component from string
     pub fn from_str(s: &str) -> Result<Self> {
         match s {
@@ -106,7 +118,10 @@ impl Component {
             "ngrok" => Ok(Component::Ngrok),
             "rm_guard" => Ok(Component::RmGuard),
             "op" => Ok(Component::Op),
-            _ => anyhow::bail!("Unknown component: {}", s),
+            _ => anyhow::bail!(
+                "Unknown setup component `{}`. Run `dev setup list` to see available components.",
+                s
+            ),
         }
     }
 

@@ -18,22 +18,19 @@ pub fn run_setup(
     skip_installed: bool,
     no_deps: bool,
 ) -> Result<()> {
-    // Validate components
     validate_components(&components)?;
 
-    // Resolve dependencies and topologically sort
     let ordered = if no_deps {
         components
     } else {
         resolve_dependencies(&components)?
     };
 
-    // Run each component
     for component in ordered {
         if skip_installed {
             let state = component.detect(ctx)?;
             if matches!(state, InstallState::Installed { .. }) {
-                println!("[skip] {} already installed", component.name());
+                println!("[ok] {}: already installed; skipping", component.name());
                 continue;
             }
         }
@@ -44,13 +41,11 @@ pub fn run_setup(
     Ok(())
 }
 
-/// Validate components list
 fn validate_components(components: &[Component]) -> Result<()> {
     if components.is_empty() {
-        anyhow::bail!("No components specified");
+        anyhow::bail!("No setup components specified");
     }
 
-    // Check for duplicates
     let mut seen = std::collections::HashSet::new();
     for component in components {
         if !seen.insert(component) {
@@ -61,36 +56,41 @@ fn validate_components(components: &[Component]) -> Result<()> {
     Ok(())
 }
 
-/// Show status of all components
 pub fn show_status(ctx: &SetupContext) -> Result<()> {
     let all_components = Component::all();
 
     println!("Setup Component Status");
-    println!("======================\n");
+    println!("======================");
+    println!(
+        "Platform: {} / {} (package manager: {})\n",
+        ctx.platform.as_str(),
+        ctx.arch.as_str(),
+        ctx.platform.package_manager()
+    );
 
     for component in all_components {
         let state = component.detect(ctx)?;
         match &state {
             InstallState::NotInstalled => {
-                println!("{:20} ❌ Not Installed", component.name());
+                println!("{:26} [warn] not installed", component.name());
             }
             InstallState::Partial { reasons } => {
                 println!(
-                    "{:20} ⚠️  Partial ({})",
+                    "{:26} [warn] partial: {}",
                     component.name(),
                     reasons.join(", ")
                 );
             }
             InstallState::Installed { version, .. } => {
                 if let Some(v) = version {
-                    println!("{:20} ✓ Installed ({})", component.name(), v);
+                    println!("{:26} [ok] installed ({})", component.name(), v);
                 } else {
-                    println!("{:20} ✓ Installed", component.name());
+                    println!("{:26} [ok] installed", component.name());
                 }
             }
             InstallState::PresentButUnknown { reasons } => {
                 println!(
-                    "{:20} ⚠️  Present but Unknown ({})",
+                    "{:26} [warn] present but unknown: {}",
                     component.name(),
                     reasons.join(", ")
                 );
@@ -101,7 +101,6 @@ pub fn show_status(ctx: &SetupContext) -> Result<()> {
     Ok(())
 }
 
-/// List all available components and their dependencies
 pub fn list_components() -> Result<()> {
     let all_components = Component::all();
 
@@ -116,13 +115,17 @@ pub fn list_components() -> Result<()> {
             deps.iter().map(|c| c.name()).collect::<Vec<_>>().join(", ")
         };
 
-        println!("{:20} deps: {}", component.name(), deps_str);
+        println!(
+            "{:26} deps: {:36} {}",
+            component.name(),
+            deps_str,
+            component.description()
+        );
     }
 
     Ok(())
 }
 
-/// Resolve dependencies and return topologically sorted list
 fn resolve_dependencies(components: &[Component]) -> Result<Vec<Component>> {
     let mut result = Vec::new();
     let mut visited = std::collections::HashSet::new();

@@ -1,24 +1,62 @@
 use super::component::InstallState;
 use super::context::SetupContext;
-use anyhow::Result;
+use anyhow::{Context, Result};
+use std::process::Command;
+
+fn command_version(ctx: &SetupContext, command: &str, args: &[&str]) -> Result<Option<String>> {
+    if !ctx.command_exists(command) {
+        return Ok(None);
+    }
+
+    let output = Command::new(command).args(args).output()?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    Ok(Some(
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string(),
+    ))
+}
+
+fn require_command(ctx: &SetupContext, component: &str, command: &str) -> Result<()> {
+    if ctx.command_exists(command) {
+        return Ok(());
+    }
+
+    anyhow::bail!(
+        "{} requires `{}` but it was not found in PATH. Install prerequisites with `dev setup run system_packages` or add `{}` to PATH.",
+        component,
+        command,
+        command
+    )
+}
+
+fn execute_shell(ctx: &SetupContext, component: &str, script: &str) -> Result<()> {
+    ctx.execute(component, Command::new("sh").arg("-c").arg(script))
+}
+
+fn user_home() -> Result<String> {
+    std::env::var("HOME").context("HOME is not set")
+}
+
+fn log_applied(ctx: &SetupContext, component: &str, message: &str) {
+    if !ctx.dry_run {
+        ctx.log.ok(component, message);
+    }
+}
 
 /// Detect zoxide
 pub fn detect_zoxide(ctx: &SetupContext) -> Result<InstallState> {
-    if ctx.command_exists("zoxide") {
-        let output = std::process::Command::new("zoxide")
-            .arg("--version")
-            .output()?;
-
-        if output.status.success() {
-            let version = String::from_utf8_lossy(&output.stdout);
-            let version_str = version.trim().to_string();
-            Ok(InstallState::Installed {
-                version: Some(version_str),
-                details: vec![],
-            })
-        } else {
-            Ok(InstallState::NotInstalled)
-        }
+    if let Some(version) = command_version(ctx, "zoxide", &["--version"])? {
+        Ok(InstallState::Installed {
+            version: Some(version),
+            details: vec![],
+        })
     } else {
         Ok(InstallState::NotInstalled)
     }
@@ -28,53 +66,32 @@ pub fn detect_zoxide(ctx: &SetupContext) -> Result<InstallState> {
 pub fn install_zoxide(ctx: &SetupContext) -> Result<()> {
     let component = "zoxide";
 
-    if !ctx.command_exists("cargo") {
-        anyhow::bail!("cargo is required but not installed");
-    }
+    require_command(ctx, component, "cargo")?;
 
     ctx.log.ok(component, "Installing zoxide via cargo");
-
-    if ctx.dry_run {
-        ctx.log.dry_run(component, "cargo install zoxide");
-        return Ok(());
-    }
-
-    let output = std::process::Command::new("cargo")
-        .arg("install")
-        .arg("zoxide")
-        .output()?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("Failed to install zoxide: {}", stderr);
-    }
-
-    ctx.log.ok(component, "zoxide installed successfully");
-    ctx.log.warn(
+    ctx.execute(
         component,
-        "Add 'eval \"$(zoxide init --cmd cd bash)\"' to your ~/.bashrc to enable",
-    );
+        Command::new("cargo").arg("install").arg("zoxide"),
+    )?;
+
+    log_applied(ctx, component, "zoxide installed successfully");
+    if !ctx.dry_run {
+        ctx.log.warn(
+            component,
+            "Add 'eval \"$(zoxide init --cmd cd bash)\"' to your ~/.bashrc to enable",
+        );
+    }
 
     Ok(())
 }
 
 /// Detect atuin
 pub fn detect_atuin(ctx: &SetupContext) -> Result<InstallState> {
-    if ctx.command_exists("atuin") {
-        let output = std::process::Command::new("atuin")
-            .arg("--version")
-            .output()?;
-
-        if output.status.success() {
-            let version = String::from_utf8_lossy(&output.stdout);
-            let version_str = version.trim().to_string();
-            Ok(InstallState::Installed {
-                version: Some(version_str),
-                details: vec![],
-            })
-        } else {
-            Ok(InstallState::NotInstalled)
-        }
+    if let Some(version) = command_version(ctx, "atuin", &["--version"])? {
+        Ok(InstallState::Installed {
+            version: Some(version),
+            details: vec![],
+        })
     } else {
         Ok(InstallState::NotInstalled)
     }
@@ -84,52 +101,27 @@ pub fn detect_atuin(ctx: &SetupContext) -> Result<InstallState> {
 pub fn install_atuin(ctx: &SetupContext) -> Result<()> {
     let component = "atuin";
 
-    if !ctx.command_exists("curl") {
-        anyhow::bail!("curl is required but not installed");
-    }
+    require_command(ctx, component, "curl")?;
 
     ctx.log.ok(component, "Installing atuin");
+    execute_shell(
+        ctx,
+        component,
+        "curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh",
+    )?;
 
-    if ctx.dry_run {
-        ctx.log.dry_run(
-            component,
-            "curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh",
-        );
-        return Ok(());
-    }
-
-    let output = std::process::Command::new("sh")
-        .arg("-c")
-        .arg("curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh")
-        .output()?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("Failed to install atuin: {}", stderr);
-    }
-
-    ctx.log.ok(component, "atuin installed successfully");
+    log_applied(ctx, component, "atuin installed successfully");
 
     Ok(())
 }
 
 /// Detect ngrok
 pub fn detect_ngrok(ctx: &SetupContext) -> Result<InstallState> {
-    if ctx.command_exists("ngrok") {
-        let output = std::process::Command::new("ngrok")
-            .arg("version")
-            .output()?;
-
-        if output.status.success() {
-            let version = String::from_utf8_lossy(&output.stdout);
-            let version_str = version.trim().to_string();
-            Ok(InstallState::Installed {
-                version: Some(version_str),
-                details: vec![],
-            })
-        } else {
-            Ok(InstallState::NotInstalled)
-        }
+    if let Some(version) = command_version(ctx, "ngrok", &["version"])? {
+        Ok(InstallState::Installed {
+            version: Some(version),
+            details: vec![],
+        })
     } else {
         Ok(InstallState::NotInstalled)
     }
@@ -139,29 +131,20 @@ pub fn detect_ngrok(ctx: &SetupContext) -> Result<InstallState> {
 pub fn install_ngrok(ctx: &SetupContext) -> Result<()> {
     let component = "ngrok";
 
+    require_command(ctx, component, "curl")?;
+
     ctx.log.ok(component, "Adding ngrok repository");
 
-    if !ctx.dry_run {
-        let output = std::process::Command::new("sh")
-            .arg("-c")
-            .arg("curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null")
-            .output()?;
-
-        if !output.status.success() {
-            anyhow::bail!("Failed to add ngrok GPG key");
-        }
-
-        let output = std::process::Command::new("sh")
-            .arg("-c")
-            .arg("echo 'deb https://ngrok-agent.s3.amazonaws.com buster main' | sudo tee /etc/apt/sources.list.d/ngrok.list")
-            .output()?;
-
-        if !output.status.success() {
-            anyhow::bail!("Failed to add ngrok repository");
-        }
-    } else {
-        ctx.log.dry_run(component, "Add ngrok repository");
-    }
+    execute_shell(
+        ctx,
+        component,
+        "curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null",
+    )?;
+    execute_shell(
+        ctx,
+        component,
+        "echo 'deb https://ngrok-agent.s3.amazonaws.com buster main' | sudo tee /etc/apt/sources.list.d/ngrok.list",
+    )?;
 
     ctx.execute(
         component,
@@ -179,11 +162,13 @@ pub fn install_ngrok(ctx: &SetupContext) -> Result<()> {
             .arg("ngrok"),
     )?;
 
-    ctx.log.ok(component, "ngrok installed successfully");
-    ctx.log.warn(
-        component,
-        "Run 'ngrok config add-authtoken <token>' to configure",
-    );
+    log_applied(ctx, component, "ngrok installed successfully");
+    if !ctx.dry_run {
+        ctx.log.warn(
+            component,
+            "Run 'ngrok config add-authtoken <token>' to configure",
+        );
+    }
 
     Ok(())
 }
@@ -191,7 +176,7 @@ pub fn install_ngrok(ctx: &SetupContext) -> Result<()> {
 /// Detect rm guard
 pub fn detect_rm_guard(_ctx: &SetupContext) -> Result<InstallState> {
     // Check if the rm function is defined in .bashrc
-    let home = std::env::var("HOME")?;
+    let home = user_home()?;
     let bashrc_path = format!("{}/.bashrc", home);
 
     if let Ok(content) = std::fs::read_to_string(&bashrc_path) {
@@ -212,8 +197,13 @@ pub fn detect_rm_guard(_ctx: &SetupContext) -> Result<InstallState> {
 pub fn install_rm_guard(ctx: &SetupContext) -> Result<()> {
     let component = "rm_guard";
 
-    let home = std::env::var("HOME")?;
+    let home = user_home()?;
     let bashrc_path = format!("{}/.bashrc", home);
+
+    if matches!(detect_rm_guard(ctx)?, InstallState::Installed { .. }) {
+        ctx.log.ok(component, "rm guard already installed");
+        return Ok(());
+    }
 
     ctx.log.ok(component, "Installing rm guard function");
 
@@ -316,31 +306,24 @@ rm() {
 
     file.write_all(rm_guard_script.as_bytes())?;
 
-    ctx.log
-        .ok(component, "rm guard function installed successfully");
-    ctx.log.warn(
-        component,
-        "Run 'source ~/.bashrc' or restart your shell to enable",
-    );
+    log_applied(ctx, component, "rm guard function installed successfully");
+    if !ctx.dry_run {
+        ctx.log.warn(
+            component,
+            "Run 'source ~/.bashrc' or restart your shell to enable",
+        );
+    }
 
     Ok(())
 }
 
 /// Detect 1Password CLI
 pub fn detect_op(ctx: &SetupContext) -> Result<InstallState> {
-    if ctx.command_exists("op") {
-        let output = std::process::Command::new("op").arg("--version").output()?;
-
-        if output.status.success() {
-            let version = String::from_utf8_lossy(&output.stdout);
-            let version_str = version.trim().to_string();
-            Ok(InstallState::Installed {
-                version: Some(version_str),
-                details: vec![],
-            })
-        } else {
-            Ok(InstallState::NotInstalled)
-        }
+    if let Some(version) = command_version(ctx, "op", &["--version"])? {
+        Ok(InstallState::Installed {
+            version: Some(version),
+            details: vec![],
+        })
     } else {
         Ok(InstallState::NotInstalled)
     }
@@ -360,7 +343,7 @@ pub fn install_op(ctx: &SetupContext) -> Result<()> {
             return Ok(());
         }
 
-        let output = std::process::Command::new("winget")
+        let output = Command::new("winget")
             .args(["install", "-e", "--id", "AgileBits.1Password.CLI"])
             .output()?;
 
@@ -372,48 +355,35 @@ pub fn install_op(ctx: &SetupContext) -> Result<()> {
 
     #[cfg(not(target_os = "windows"))]
     {
-        if !ctx.command_exists("curl") {
-            anyhow::bail!("curl is required but not installed");
-        }
+        require_command(ctx, component, "curl")?;
 
         ctx.log.ok(component, "Adding 1Password repository");
 
-        if !ctx.dry_run {
-            // Add GPG key
-            let output = std::process::Command::new("sh")
-                .arg("-c")
-                .arg("curl -sS https://downloads.1password.com/linux/keys/1password.asc | sudo gpg --dearmor -o /usr/share/keyrings/1password-archive-keyring.gpg")
-                .output()?;
+        execute_shell(
+            ctx,
+            component,
+            "if [ ! -f /usr/share/keyrings/1password-archive-keyring.gpg ]; then curl -sS https://downloads.1password.com/linux/keys/1password.asc | sudo gpg --dearmor -o /usr/share/keyrings/1password-archive-keyring.gpg; fi",
+        )?;
 
-            if !output.status.success() {
-                anyhow::bail!("Failed to add 1Password GPG key");
-            }
-
-            // Add repository
-            let arch = std::process::Command::new("dpkg")
-                .arg("--print-architecture")
-                .output()?;
-            let arch_str = String::from_utf8_lossy(&arch.stdout).trim().to_string();
-
-            let repo_line = format!(
-                "deb [arch={} signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/{} stable main",
-                arch_str, arch_str
-            );
-
-            let output = std::process::Command::new("sh")
-                .arg("-c")
-                .arg(format!(
-                    "echo '{}' | sudo tee /etc/apt/sources.list.d/1password.list",
-                    repo_line
-                ))
-                .output()?;
-
-            if !output.status.success() {
-                anyhow::bail!("Failed to add 1Password repository");
-            }
+        let arch_str = if ctx.dry_run {
+            "$(dpkg --print-architecture)".to_string()
         } else {
-            ctx.log.dry_run(component, "Add 1Password repository");
-        }
+            let arch = Command::new("dpkg").arg("--print-architecture").output()?;
+            String::from_utf8_lossy(&arch.stdout).trim().to_string()
+        };
+        let repo_line = format!(
+            "deb [arch={} signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/{} stable main",
+            arch_str, arch_str
+        );
+
+        execute_shell(
+            ctx,
+            component,
+            &format!(
+                "echo '{}' | sudo tee /etc/apt/sources.list.d/1password.list",
+                repo_line
+            ),
+        )?;
 
         ctx.execute(
             component,
@@ -428,12 +398,13 @@ pub fn install_op(ctx: &SetupContext) -> Result<()> {
         )?;
     }
 
-    ctx.log
-        .ok(component, "1Password CLI installed successfully");
-    ctx.log.warn(
-        component,
-        "Configure service account tokens in ~/.env as OP_PRODUCTION and OP_DEVELOPMENT",
-    );
+    log_applied(ctx, component, "1Password CLI installed successfully");
+    if !ctx.dry_run {
+        ctx.log.warn(
+            component,
+            "Configure service account tokens in ~/.env as OP_PRODUCTION and OP_DEVELOPMENT",
+        );
+    }
 
     Ok(())
 }

@@ -68,13 +68,11 @@ impl Platform {
 #[derive(Debug, Clone)]
 pub struct SetupLogger {
     log_file: Option<PathBuf>,
-    #[allow(dead_code)]
-    dry_run: bool,
 }
 
 impl SetupLogger {
-    pub fn new(log_file: Option<PathBuf>, dry_run: bool) -> Self {
-        Self { log_file, dry_run }
+    pub fn new(log_file: Option<PathBuf>) -> Self {
+        Self { log_file }
     }
 
     pub fn ok(&self, component: &str, message: &str) {
@@ -87,7 +85,6 @@ impl SetupLogger {
         self.log_to_file(component, "warn", message, None, None);
     }
 
-    #[allow(dead_code)]
     pub fn error(&self, component: &str, message: &str) {
         eprintln!("[error] {}: {}", component, message);
         self.log_to_file(component, "error", message, None, None);
@@ -148,9 +145,7 @@ impl SetupLogger {
 #[derive(Debug, Clone)]
 pub struct SetupConfig {
     pub cuda_version: Option<String>,
-    #[allow(dead_code)]
     pub nvidia_driver_version: Option<String>,
-    #[allow(dead_code)]
     pub cuda_driver_version: Option<String>,
     pub node_version: String,
     pub default_components: Vec<String>,
@@ -233,7 +228,7 @@ impl SetupContext {
     pub fn new(dry_run: bool, log_file: Option<PathBuf>, config: SetupConfig) -> Result<Self> {
         let arch = Architecture::detect()?;
         let platform = Platform::detect()?;
-        let log = SetupLogger::new(log_file, dry_run);
+        let log = SetupLogger::new(log_file);
 
         // Validate config
         config.validate()?;
@@ -281,6 +276,10 @@ impl SetupContext {
             .log_command(component, &cmd_str, Some(&stdout), Some(&stderr), status);
 
         if !output.status.success() {
+            self.log.error(
+                component,
+                &format!("Command failed with status {}", output.status),
+            );
             anyhow::bail!("Command failed with status {}: {}", output.status, stderr);
         }
 
