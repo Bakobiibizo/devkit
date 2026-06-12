@@ -36,6 +36,9 @@ service-account*.json
 
 # Claude & AI
 .claude/
+.pi/
+.ldgr/
+.researchcore/
 
 # Reference & Local
 .reference/
