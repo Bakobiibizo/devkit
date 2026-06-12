@@ -1,55 +1,42 @@
 # devkit
 
-A unified developer workflow toolkit for Rust, Python, TypeScript, and Elixir projects.
+Devkit is a Rust workspace that ships the `dev` CLI: a single binary for common project workflows across Rust, Python, TypeScript, and Elixir projects.
 
-## `dev` CLI
+The CLI reads a devkit config, indexes tasks and language pipelines, and exposes consistent commands for running checks, managing `.env` files, scaffolding language tooling, driving git/release flows, generating review context, running setup components, and launching configured agents.
 
-A single-binary Rust CLI for unified developer workflows:
-
-- Config-driven task runner (pipelines: `fmt`, `lint`, `type`, `test`, `fix`, `check`, `ci`)
-- Language scaffolding + provisioning (`dev install`)
-- Git flows (`dev git ...`)
-- Versioning (`dev version ...`)
-- `.env` helpers (`dev env ...`)
-- System setup (`dev setup ...`)
-- Dockerized GPU dev containers (`dev docker ...`)
-- Review overlays and directory manifests (`dev review`, `dev walk`)
-- Summarized command execution (`dev summary ...`)
-- Async configurable agents (`dev agent ...`)
-
-For the authoritative spec, see `docs/spec.md`.
-
-## Install
-
-### From crates.io
+## Fresh Clone Quick Start
 
 ```bash
-cargo install devkit-cli
-```
-
-### From source
-
-```bash
-# Clone the repo
 git clone https://github.com/bakobiibizo/devkit
 cd devkit
 
-# Install dev CLI
+# Build and verify the workspace.
+cargo build --workspace
+cargo test --workspace
+
+# Install the CLI from this checkout.
 cargo install --path crates/dev
+
+# Create a starter config, then inspect what the CLI sees.
+dev config generate
+dev config show
+dev list
+dev --help
 ```
 
-### Prebuilt binaries
-
-Download from [GitHub Releases](https://github.com/bakobiibizo/devkit/releases).
-
-## Quick usage
-
-### Tasks and pipelines
+To run without installing:
 
 ```bash
+cargo run -p devkit-cli -- --help
+cargo run -p devkit-cli -- config check
+```
+
+## Core Usage
+
+```bash
+# Configured tasks and language pipelines
 dev list
 dev run <task>
-
 dev fmt
 dev lint
 dev type
@@ -57,142 +44,66 @@ dev test
 dev fix
 dev check
 dev ci
+dev all check
 
-dev all <fmt|lint|type|test|fix|check|ci>
+# Language defaults and scaffolding
+dev language set rust
+dev install [rust|python|typescript|elixir]
 
-# Help summarizes first-class verbs and configured workflows.
-dev --help
-```
-
-The first-class verbs summarize subprocess output by default. Use `dev run <task>` when you explicitly want the raw configured task output.
-
-### Config
-
-```bash
-dev config
-dev config check
-dev config generate [PATH] --force
-```
-
-### Summary and async agents
-
-```bash
-dev summary run <task>
-dev summary exec -- cargo test
-
+# Summarized execution and background agents
+dev summary exec -- cargo test --workspace
+dev summary run all_check
 dev agent run default --prompt "Fix the failing tests"
-dev agent run codex-loop --iterations 3 --prompt-file task.md
-dev agent run codex-loop --attach --prompt "Run one foreground pass"
 dev agent list
 dev agent status <job-id>
 ```
 
-Configure agents in devkit config and configure Codex model providers/endpoints in `~/.codex/config.toml`. `dev agent list` reports `running`, `ok`, or `failed(<code>)`.
+`dev run <task>` streams raw task output. The first-class verbs and `dev summary ...` capture noisy command output and print a compact summary.
 
-### Language tooling
+## Command Families
 
-```bash
-dev install [rust|python|typescript|elixir]
-dev language set <name>
-```
+The current command surface is:
 
-### `.env` management
+- `list`, `run`, `start`, first-class verbs, and `all` for configured tasks and pipelines.
+- `config`, `language`, and `install` for devkit configuration and language setup.
+- `env` for `.env` files, profiles, validation, templates, diffs, and sync.
+- `git` and `version` for branch workflows, release PRs, version bumps, tags, and changelog output.
+- `docker`, `setup`, and `os` for container scaffolds, host setup components, inference repo setup, and platform config overlays.
+- `review` and `walk` for Markdown review reports and LLM-ready directory manifests.
+- `summary` and `agent` for summarized command execution and configured coding agents.
+- `vault` for 1Password CLI-backed secrets.
+- `research` for internal research workspace scaffolding. It is hidden from top-level help but documented in `docs/USAGE.md`.
 
-```bash
-dev env [--raw]
-dev env get <KEY>
-dev env add <KEY> <VALUE>
-dev env rm <KEY>
-
-dev env profiles
-dev env switch <PROFILE>
-dev env save <NAME>
-
-dev env check
-dev env init
-dev env template
-
-dev env diff [REF]
-dev env sync [REF]
-```
-
-## Docker workflow (GPU dev container)
-
-This is designed for “build inside containers” workflows (including NVIDIA GPU containers).
-
-### 1) Scaffold Docker files in your project
-
-Run this in the project directory:
+## Git Workflow
 
 ```bash
-dev docker init
+dev git branch-create feature/docs
+dev git branch-create feature/docs --from main --push
+dev git branch-finalize --delete
+dev git release-pr patch --from main --to release-candidate
 ```
 
-This generates:
+Branch commands resolve their base from the explicit flag first, then `[git].main_branch`, then `origin/HEAD`, then local `main`/`master`, then the current branch. Repositories without a remote can still create local branches.
 
-- `docker/Dockerfile.core`
-- `docker-compose.yml`
-- `.env` (includes `CORE_IMAGE`, `UID`, `GID`)
-
-### 2) Build the core image
-
-`dev docker build` reads `CORE_IMAGE` from your project `.env` by default:
-
-```bash
-dev docker build
-```
-
-Override tag if needed:
-
-```bash
-dev docker build --image bakobiibizo/devkit:cuda13
-```
-
-### 3) Enter the container with an interactive shell
-
-This is the primary “put me in the container” command:
-
-```bash
-dev docker dev
-```
-
-It runs:
-
-- `docker compose up -d --build`
-- then `docker compose exec <service> bash -l`
-
-Options:
-
-```bash
-dev docker dev --service core
-dev docker dev --no-up
-```
-
-### 4) Compose helpers
-
-```bash
-dev docker compose up build
-# or detached:
-dev docker compose up build -d
-```
-
-## Setup system
+## Setup And Docker
 
 ```bash
 dev setup
-
-dev setup run <components...>
-dev setup all
-
 dev setup status
 dev setup list
-dev setup config
+dev setup run rustup uv docker
+dev setup all --skip-installed
+
+dev docker init
+dev docker build
+dev docker develop
+dev docker compose up build -d
 ```
 
-## Review + walk
+Setup components are idempotent and dry-run aware. CUDA host tooling uses validate-first detection to avoid modifying existing OEM GPU images unless explicitly requested by the component flow.
 
-```bash
-dev review [--output <path>] [--include-working] [--main]
+## Docs
 
-dev walk [DIR] -o manifest.md --max-depth 10 --extensions .rs .py
-```
+- [`docs/USAGE.md`](docs/USAGE.md) has command examples and configuration notes.
+- [`docs/spec.md`](docs/spec.md) is the functional and technical spec.
+- [`docs/example.config.toml`](docs/example.config.toml) is the embedded starter config source.

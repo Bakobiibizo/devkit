@@ -45,20 +45,25 @@ The CLI follows a config-driven task runner pattern:
 
 ```
 src/
-├── main.rs          # Entry: logging init → cli parse → runner
+├── main.rs          # Entry: logging init -> cli parse -> dispatch
 ├── cli.rs           # Clap definitions for all commands
+├── cli_help.rs      # Dynamic help summaries from active config
+├── dispatch.rs      # Context/config resolution and command routing
 ├── config.rs        # Loads ~/.dev/config.toml with serde + toml_edit
 ├── tasks.rs         # Task indexing, flattening, cycle detection
-├── runner.rs        # Command execution, dry-run, status logging
 ├── envfile.rs       # .env file read/write with profile support
 ├── gitops.rs        # Git branch workflows, release PRs
 ├── versioning.rs    # Version bump, changelog, tagging
 ├── dockergen.rs     # Docker file generation and compose helpers
 ├── review.rs        # Git diff → markdown review overlay
+├── vault.rs         # 1Password CLI integration
 ├── walk.rs          # Directory manifests for LLM context
 ├── templates.rs     # rust-embed template handling
-├── scaffold/        # Language-specific scaffolding (rust, python, typescript)
-└── setup/           # System setup components (14 components: docker, cuda, node, etc.)
+├── commands/        # Per-family handlers: task, config, env, git, setup, docker,
+│                    # review, walk, summary, agent, research, vault, os, version
+├── core/            # Shared exec, git, changelog, and output helpers
+├── scaffold/        # Language-specific scaffolding (rust, python, typescript, elixir)
+└── setup/           # 7 setup modules; 15 named components in setup/component.rs
 ```
 
 **Key patterns:**
@@ -66,6 +71,7 @@ src/
 - Tasks can reference other tasks; flattening resolves refs with cycle detection
 - Templates embedded via `rust-embed` from `templates/` directory
 - Setup components implement `detect() -> InstallState` and `install()` contract
+- Setup component names: `system_packages`, `git_lfs`, `uv`, `rustup`, `node`, `pnpm`, `pm2`, `docker`, `nvidia_container_runtime`, `cuda_toolkit_host`, `zoxide`, `atuin`, `ngrok`, `rm_guard`, `op`
 - Output uses `[ok]/[warn]/[error]` markers for feedback
 
 ## Config Structure

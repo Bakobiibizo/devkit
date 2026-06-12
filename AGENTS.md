@@ -8,11 +8,11 @@
 - Follow spec in `docs/spec.md`; keep verbs/pipelines aligned with config example.
 - Record design/implementation notes inline or in this log for continuity.
 
-## TODO (2025-10-07)
+## Completed Work (2025-10-07)
 - [x] Outline initial crate structure (`cli`, `config`, `tasks`, etc.).
 - [x] Implement CLI parsing scaffold with clap enums.
 - [x] Draft config data models using `serde`/`toml_edit`.
-- [x] Set up module tree and placeholder files per spec.
+- [x] Set up module tree and initial module skeleton files per spec.
 - [x] Wire task indexing into command execution with dry-run logging.
 - [x] Implement config discovery/override mechanics (`--file`, default path).
 - [x] Support updating default language via `dev language set`.

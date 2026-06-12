@@ -1,520 +1,336 @@
-# Dev CLI (Rust, single binary) — Functional + Tech Spec
+# Dev CLI Functional And Technical Spec
 
 ## Goals
 
-* One self-contained Rust binary, easy to scp to any server.
-* Dynamically reads `~/.dev/config.toml` to expose verbs and pipelines.
-* Uniform verbs across languages: `fmt, lint, type, test, fix, check, ci`.
-* Git flows: `branch-create`, `branch-finalize`, `release-pr`.
-* Version management: bump, tag, changelog.
-* Language management: `dev language <name>`, `dev install [<language>]` for scaffold + tool install.
-* Env management: `dev env`, `dev env add`, `dev env rm`.
-* Config management: `dev config`, `dev config check`, `dev config generate`.
+- Ship one self-contained Rust binary that is easy to copy to a workstation or server.
+- Read devkit TOML config dynamically and expose configured tasks, language pipelines, agents, setup defaults, and validation rules.
+- Provide uniform language verbs: `fmt`, `lint`, `type`, `test`, `fix`, `check`, and `ci`.
+- Keep core workflows non-interactive, scriptable, idempotent where possible, and dry-run aware.
+- Preserve config comments when the CLI edits TOML.
 
-## CLI surface
+## CLI Surface
 
-```
+```text
 dev [GLOBAL] <command> [args]
 
 Global:
-  -C, --chdir <PATH>        Change working directory
-  -f, --file <PATH>         Config path (default: ~/.dev/config.toml)
-      --project <NAME>      Select a named project from config (or use default_project)
+  -C, --chdir <PATH>        Change working directory before running
+  -f, --file <PATH>         Use an explicit config file
+      --project <NAME>      Select a named project from config
   -l, --language <NAME>     Override default_language
-  -n, --dry-run             Print commands without executing
-  -v, --verbose...          Verbosity (repeatable)
+  -n, --dry-run             Print commands without executing where supported
+  -v, --verbose...          Increase verbosity
       --no-color            Disable color
 
 Commands:
-  list                             List tasks (grouped by language/verb)
-  run <task>                       Run named task or pipeline (e.g., rust_fmt, all_check)
-  start [--port <PORT>] [--prod]   Start a long-running dev server for the current project
-  fmt|lint|type|test|fix|check|ci  Run verb for current or --language
-  all <verb>                       Run monorepo aggregator (fmt|lint|type|test|fix|check|ci)
+  list
+  run <task>
+  start [--port <PORT>] [--prod]
+  fmt | lint | type | test | fix | check | ci
+  all <fmt|lint|type|test|fix|check|ci>
 
-  language set <NAME>              Set default language in ~/.dev/config.toml
-  install [<NAME>]                 Scaffold configs + install tooling (defaults to current language)
+  config [show]
+  config path
+  config check
+  config generate [PATH] [--force]
+  config reload
+  config add [NAME] [--force] [--append] -- <command...>
 
-  git branch-create <name> [--from <base>] [--push] [--allow-dirty]
-  git branch-finalize <name> [--into <base>] [--delete] [--allow-dirty]
-  git release-pr [--from <base>] [--to <head>] [--no-open]
+  language set <NAME>
+  install [<NAME>] [--force] [--no-scaffold]
 
-  version bump <major|minor|patch|prerelease|custom <x.y.z>> [--tag] [--no-commit] [--no-changelog]
-  version changelog [--since <ref>] [--unreleased]
+  env [--raw] [list]
+  env get <KEY>
+  env add <KEY> <VALUE>
+  env rm <KEY>
+  env profiles
+  env switch <PROFILE>
+  env save <NAME>
+  env check
+  env init
+  env template
+  env diff [REF]
+  env sync [REF]
+
+  git branch-create <NAME> [--from <BASE>] [--push] [--allow-dirty]
+  git branch-finalize [NAME] [--into <BASE>] [--delete] [--allow-dirty]
+  git release-pr <major|minor|patch|prerelease> [--from <BASE>] [--to <HEAD>] [--no-open]
+
   version show
+  version bump <major|minor|patch|prerelease> [--custom <X.Y.Z>] [--tag] [--no-commit] [--no-changelog]
+  version changelog [--since <REF>] [--unreleased]
 
-  env [--raw]                       List .env variables (--raw shows values unmasked)
-  env get <KEY>                    Get a single .env variable value
-  env add <KEY> <VALUE>            Add/update .env var
-  env rm <KEY>                     Remove .env var
-  env profiles                     List available environment profiles (.env.*)
-  env switch <PROFILE>             Switch to a different environment profile
-  env save <NAME>                  Save current .env as a named profile
-  env check                        Validate .env against required keys in config
-  env init                         Initialize .env from .env.example if missing
-  env template                     Generate .env.example from current .env
-  env diff [<REF>]                 Show diff between .env and reference (default: .env.example)
-  env sync [<REF>]                 Add missing keys from reference file
-
-  docker init [--force] [--base-image <REF>] [--core-image <REF>] [--service <NAME>]
-                                    Generate docker/Dockerfile.core, docker-compose.yml, and .env
-  docker build [--image <REF>]      Build docker/Dockerfile.core tagged as CORE_IMAGE (from .env)
-  docker compose up build [-d]      Run `docker compose up --build` (optionally detached)
-  docker develop [--service <NAME>] [--no-up]
-                                    Start compose service and open an interactive shell
-  docker dev ...                    Alias for `docker develop`
-
-  config                           Display config
-  config check                     Validate config and display its path
-  config generate <PATH> [--force] Generate <PATH> from default config 
-                                    (default: ~/.dev/config.toml)
-  config reload                    Reparse config and reindex tasks
-
-  setup                             Run default setup components (skip installed)
-  setup run [--skip-installed] [--no-deps] <components...>
+  setup
+  setup run [--skip-installed] [--no-deps] <COMPONENT...>
+  setup inference <SERVICE> [--dest <PATH>] [--force] [--no-cache]
   setup all [--skip-installed] [--no-deps]
   setup status
   setup list
   setup config
 
+  docker init [--force] [--base-image <REF>] [--service <NAME>]
+  docker build [--image <REF>]
+  docker compose up build [-d|--detach]
+  docker develop [--service <NAME>] [--no-up]
+  docker dev ...                    Alias for docker develop
+
   review [--output <PATH>] [--include-working] [--main]
-                                    Generate a Markdown code review overlay from git diffs
   walk [DIR] [-o, --output <PATH>] [--format <FMT>] [--max-depth <N>] [--no-content]
        [--extensions <EXT...>] [--include-hidden]
-                                    Generate a directory manifest (optionally with contents)
+
+  summary run <TASK> [--raw]
+  summary exec [--raw] -- <command...>
+
+  agent run [AGENT] [--prompt <TEXT>] [--prompt-file <PATH|->] [--model <MODEL>]
+            [--cwd <PATH>] [--attach] [--iterations <N>] [--arg <ARG>...]
+  agent list
+  agent status <JOB_ID> [--tail <N>]
 
   vault list [--account production|development]
-                                    List password items in a vault
-  vault get <item> [--field <name>] [--account ...]
-                                    Get a secret value
-  vault set <item> <value> [--account ...]
-                                    Create or update a secret
-  vault delete <item> [--account ...]
-                                    Delete a secret
+  vault get <ITEM> [--field <NAME>] [--account production|development]
+  vault set <ITEM> <VALUE> [--account production|development]
+  vault delete <ITEM> [--account production|development]
+
+  os show
+  os linux
+  os windows
+
+  research init [DIR] [--name <NAME>] [--package <NAME>] [--force]
+                [--skip-install] [--harness-git <URL>]
 ```
 
-## Config format (minimal recap)
+`research` is hidden from top-level help but remains part of the command surface for internal research scaffolding. The first-class verbs are also hidden clap variants so dynamic help can summarize configured pipelines cleanly.
 
-* `default_language = "rust" | "python" | "typescript" | "elixir"`
-* `[tasks.<name>]` with `commands = [[...], ...]` or `["task_ref", ...]`
-* `[languages.<name>.pipelines] fmt|lint|type|test|fix|check|ci = ["task_a", "task_b"]`
-* Monorepo: `[tasks.all_fmt]`, `[tasks.all_check]`, etc.
-* `[git] main_branch, release_branch, version_file, changelog`
+## Config Format
 
-Use `toml_edit` so comments survive round-trip edits.
+Core fields:
 
-## Execution model
+- `default_language = "rust" | "python" | "typescript" | "elixir"`
+- `default_agent = "<agent-name>"`
+- `[tasks.<name>]` with `commands = [[...], ...]` or string references to other tasks.
+- `[languages.<name>.pipelines]` mapping `fmt`, `lint`, `type`, `test`, `fix`, `check`, and `ci` to task names.
+- `[git]` for `main_branch`, `release_branch`, `version_file`, and `changelog`.
+- `[env]` for `required` and `optional` key lists.
+- `[summary]` for shell and output capture limits.
+- `[agents.<name>]` for adapter, command, cwd, model override, extra args, and loop iterations.
+- `[setup]` for default components, skipped components, and tool versions.
 
-* Composite tasks flatten into ordered command lists before execution.
-* No implicit shell, run argv arrays directly. If a command contains shell syntax, run `["sh","-lc", "<cmd>"]`.
-* Stream output, prefix with `[k/N] <task> :: <argv>`.
-* Stop on first failure unless `allow_fail = true`.
+Config discovery order:
 
-## Git flows
+1. Explicit `--file`.
+2. `.dev/config.<os>.toml`.
+3. `.dev/config.toml`.
+4. `tools/dev/config.<os>.toml`.
+5. `tools/dev/config.toml`.
+6. `~/.dev/config.toml`.
 
-* Shell out to `git` and `gh` if available.
-* `branch-create`: checkout base (default `release-candidate`), fetch, rebase, create branch, push with upstream.
-* `branch-finalize`: merge feature into base with `--no-ff`, push, optionally delete feature locally/remotely.
-* `release-pr`: compute range, update or create `CHANGELOG.md`, open PR via `gh pr create` or GitHub API with `GITHUB_TOKEN`.
+Missing explicit or discovered config is an error. Missing home-default config is treated as an empty config for command families that can run without configured tasks.
 
-## Version management
+## Execution Model
 
-* Detect backend from `git.version_file` or auto:
+- Composite tasks flatten into ordered command lists before execution.
+- Command arrays execute directly without an implicit shell.
+- Shell syntax belongs in an explicit command such as `["sh", "-lc", "..."]`.
+- Raw tasks stream output with `[ok]`, `[warn]`, and `[error]` status markers.
+- First-class verbs and summary commands capture output and print compact summaries.
+- Task execution stops on first failure unless the task marks a command as allowed to fail.
 
-  * `pyproject.toml` → `[project].version`
-  * `package.json` → `version`
-  * `Cargo.toml` → `[package].version`
-* `version bump` edits the file, commits unless `--no-commit`, optional tag `vX.Y.Z`.
-* Changelog follows Keep a Changelog, it promotes “Unreleased” into the new version section with today’s date.
+## Git Workflow
 
-## Language installers and scaffolds
+`branch-create`:
 
-### `dev install rust`
+- Requires a clean worktree unless `--allow-dirty` is set.
+- Resolves the base branch from `--from`, then `[git].main_branch`, then `origin/HEAD`, then local `main`/`master`, then the current branch.
+- If `origin` exists, fetches and fast-forwards/rebases the base before creating the new branch.
+- If no remote exists, skips remote work and creates the local branch.
+- Pushes with upstream tracking only when `--push` is set.
 
-* Ensure `rustup`, install components if missing:
+`branch-finalize`:
 
-  * `rustup component add rustfmt clippy`
-* Optional tools if present in config `languages.rust.install`: `cargo-audit`, `cargo-deny`, `cargo-udeps` (use `+nightly` for udeps if needed).
-* Drop sample files if absent:
+- Defaults the feature branch to the current branch when `NAME` is omitted.
+- Resolves the target base from `--into` using the same fallback order as branch creation.
+- Merges the feature branch into the base with `--no-ff`, pushes when a remote is available, and optionally deletes the feature branch locally/remotely with `--delete`.
 
-  * `.cargo/config.toml` (incremental, target dir hints)
-  * `deny.toml` (license/banlist template)
+`release-pr`:
 
-### `dev install python`
+- Requires a bump level.
+- Uses `[git].release_branch` or the `--to` override for the release head.
+- Updates version/changelog state, pushes the release branch, and opens a GitHub PR with `gh` unless `--no-open` is set.
 
-* Ensure `uv`, run `uv sync` if `pyproject.toml` exists.
-* Create `ruff.toml`, `mypy.ini`, `.pre-commit-config.yaml` with sane defaults if missing.
+## Version Management
 
-### `dev install typescript`
+Version detection uses `git.version_file` first, then common manifests:
 
-* Ensure `pnpm` (or fallback to `npm`), run `pnpm install` if `package.json` exists.
-* Create `eslint.config.ts`, `tsconfig.json`, `vitest.config.ts`, `.prettierrc` if missing.
+- `pyproject.toml` → `[project].version`
+- `package.json` → `version`
+- `Cargo.toml` → `[package].version`
 
-Scaffold templates (safe defaults):
+`version bump` updates the manifest, updates changelog unless `--no-changelog` is set, commits unless `--no-commit` is set, and tags when `--tag` is passed. Changelog dates use the current local date.
 
-* `eslint.config.ts`
+## Language Installers
 
-```ts
-import tsParser from "@typescript-eslint/parser";
-import tsPlugin from "@typescript-eslint/eslint-plugin";
+`dev install rust`:
 
-export default [
-  {
-    files: ["**/*.ts", "**/*.tsx"],
-    languageOptions: { parser: tsParser, ecmaVersion: "latest", sourceType: "module" },
-    plugins: { "@typescript-eslint": tsPlugin },
-    rules: {
-      "no-unused-vars": "warn",
-      "no-undef": "error",
-      "@typescript-eslint/no-explicit-any": "off"
-    }
-  }
-];
-```
+- Ensures Rust formatting/lint components are available.
+- Writes `.cargo/config.toml` and `deny.toml` templates when absent unless `--no-scaffold` is set.
+- Runs optional `languages.rust.install` provisioning commands.
 
-* `tsconfig.json`
+`dev install python`:
 
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "types": ["vitest/globals"]
-  },
-  "include": ["src", "test", "tests"]
-}
-```
+- Ensures `uv` when configured.
+- Runs `uv sync` when appropriate.
+- Writes `ruff.toml`, `mypy.ini`, `.pre-commit-config.yaml`, and `.env.example` templates when absent.
 
-* `vitest.config.ts`
+`dev install typescript`:
 
-```ts
-import { defineConfig } from "vitest/config";
-export default defineConfig({ test: { globals: true, environment: "node" } });
-```
+- Uses `pnpm` when available and falls back to npm-oriented tooling where configured.
+- Writes `eslint.config.ts`, `tsconfig.json`, `vitest.config.ts`, and `.prettierrc` templates when absent.
 
-* `ruff.toml`
+`dev install elixir`:
 
-```toml
-line-length = 100
-target-version = "py311"
-extend-select = ["I", "UP", "PL", "RUF"]
-ignore = ["E501"]
-```
+- Scaffolds Elixir-oriented configuration from the embedded template set.
 
-* `mypy.ini`
+## Environment Management
 
-```ini
-[mypy]
-python_version = 3.11
-strict = False
-warn_unused_ignores = True
-disallow_untyped_defs = False
-```
+- `.env` lookup starts in the working directory and falls back to the git root.
+- `dev env` masks values unless `--raw` is passed.
+- `get`, `add`, and `rm` preserve comments and ordering.
+- Profiles are `.env.<name>` files, excluding `.env.example`.
+- `check` validates required and optional keys from config.
+- `template`, `init`, `diff`, and `sync` operate against `.env.example` by default.
 
-* `deny.toml` (snippet)
+## Setup System
 
-```toml
-[licenses]
-unlicensed = "deny"
-allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "ISC"]
-```
+Setup components:
 
-## .env management
+- `system_packages`
+- `git_lfs`
+- `uv`
+- `rustup`
+- `node`
+- `pnpm`
+- `pm2`
+- `docker`
+- `nvidia_container_runtime`
+- `cuda_toolkit_host`
+- `zoxide`
+- `atuin`
+- `ngrok`
+- `rm_guard`
+- `op`
 
-* File path resolution:
+Dependency rules:
 
-  * Look for `.env` in CWD, else project root (git top). Create if missing.
-* `dev env` prints sorted keys, masks values unless `--raw`.
-* `dev env get KEY` prints the value of a single key (useful for scripts).
-* `dev env add KEY VALUE` inserts or replaces exactly one line (`KEY=VALUE`), preserves order/comments around.
-* `dev env rm KEY` removes the line if present.
-* Use a tiny parser: read lines, allow `# comments`, `KEY=VALUE`, no multi-line.
+- `git_lfs` depends on `system_packages`.
+- `docker` depends on `system_packages`.
+- `pnpm` depends on `node`.
+- `pm2` depends on `node` and `pnpm`.
+- `nvidia_container_runtime` depends on `docker`.
 
-### Environment Profiles
+`detect()` functions must remain pure and side-effect free. Installers must be idempotent and dry-run aware. CUDA host detection uses `Installed`, `Partial`, `PresentButUnknown`, and `NotInstalled` states so existing OEM images are validated rather than overwritten.
 
-* `dev env profiles` lists available profiles (`.env.*` files, excluding `.env.example`).
-* `dev env switch <profile>` copies `.env.<profile>` to `.env`.
-* `dev env save <name>` copies current `.env` to `.env.<name>`.
+`setup inference <service>` clones or updates `https://github.com/bakobiibizo/dev-<service>.git`, strips explicit Compose `container_name:` entries to avoid collisions, and runs `scripts/setup.sh`.
 
-### Environment Validation
+## Docker
 
-* Config supports `[env]` section with `required` and `optional` key lists.
-* `dev env check` validates `.env` against config requirements:
-  * Errors if required keys are missing or empty.
-  * Warns if optional keys are missing.
+`docker init` writes:
 
-### Environment Templates
+- `docker/Dockerfile.core`
+- `docker-compose.yml`
+- `.env` entries for `CORE_IMAGE`, `UID`, and `GID`
 
-* `dev env template` generates `.env.example` from current `.env` (keys only, values stripped).
-* `dev env init` copies `.env.example` to `.env` if `.env` doesn't exist.
-* `dev env diff [ref]` compares `.env` against a reference file (default: `.env.example`).
-* `dev env sync [ref]` adds missing keys from reference file to `.env`.
+`docker build` builds `docker/Dockerfile.core` using `CORE_IMAGE` from `.env` unless `--image` is passed. `docker develop` runs compose startup unless `--no-up` is set and then opens an interactive shell in the chosen service.
 
-## 1Password Vault Integration
+## Review And Walk
 
-Manage secrets via 1Password CLI (`op`) with service account tokens.
+`review` generates Markdown code review reports from staged diffs, working tree diffs, or branch comparison to main. `walk` generates Markdown directory manifests with file contents by default and supports extension filtering, max-depth limits, and hidden-file inclusion.
 
-### CLI Commands
+## Summary And Agents
 
-```
-dev vault list [--account production|development]
-                                    List password items in a vault
-dev vault get <item> [--field <name>] [--account ...]
-                                    Get a secret value (default field: password)
-dev vault set <item> <value> [--account ...]
-                                    Create or update a secret
-dev vault delete <item> [--account ...]
-                                    Delete a secret from the vault
-```
+`summary` runs configured or ad-hoc commands through the configured shell, captures bounded stdout/stderr, and prints either an LLM-generated summary or a deterministic tail summary.
 
-### Service Account Configuration
+Agents run configured adapters:
 
-Store service account tokens in `~/.env`:
+- `codex` adapter invokes Codex with the configured prompt/model/cwd.
+- `loop` adapter repeats a configured command for a bounded number of iterations.
+- Async jobs write logs and status records under the devkit job directory; `agent list` and `agent status` inspect them.
 
-```
-OP_PRODUCTION=ops_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-OP_DEVELOPMENT=ops_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
+## Vault
 
-The `--account` flag selects which vault to use:
-- `production` uses `OP_PRODUCTION` token
-- `development` uses `OP_DEVELOPMENT` token (default)
+Vault commands use the 1Password CLI (`op`). Account selection maps to environment tokens:
 
-### GitHub Actions Integration
+- `development` → `OP_DEVELOPMENT`
+- `production` → `OP_PRODUCTION`
 
-Use the 1Password CLI in CI workflows to access secrets securely:
+The default account is `development`.
 
-```yaml
-# .github/workflows/deploy.yml
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+## OS Config Overlays
 
-      - name: Install 1Password CLI
-        run: |
-          curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
-            sudo gpg --dearmor -o /usr/share/keyrings/1password-archive-keyring.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] \
-            https://downloads.1password.com/linux/debian/amd64 stable main" | \
-            sudo tee /etc/apt/sources.list.d/1password.list
-          sudo apt update && sudo apt install -y 1password-cli
+`os linux` and `os windows` write embedded platform templates beside the active config as `config.linux.toml` or `config.windows.toml`. Config discovery prefers the platform-specific file when present.
 
-      - name: Load secrets and deploy
-        env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_PRODUCTION }}
-        run: |
-          # Read secrets from 1Password
-          export API_KEY=$(op read "op://production/api-credentials/password")
-          export DB_PASSWORD=$(op read "op://production/database/password")
+## Project Layout
 
-          # Use secrets in deployment
-          ./deploy.sh
-```
-
-Store your service account token as a GitHub secret (`OP_PRODUCTION` or `OP_DEVELOPMENT`).
-
-### Setup Component
-
-Install the 1Password CLI via `dev setup`:
-
-```bash
-dev setup run op
-```
-
-This installs:
-- **Windows**: `winget install AgileBits.1Password.CLI`
-- **Linux**: Adds 1Password apt repository and installs `1password-cli`
-
-## Project layout (single crate)
-
-```
-dev-cli/
+```text
+crates/dev/
   Cargo.toml
   src/
     main.rs
-    cli.rs            // clap subcommands
-    config.rs         // load/validate with serde + toml_edit
-    tasks.rs          // indexing, flattening, cycle detection
-    runner.rs         // exec, dry-run, logging
-    gitops.rs         // branch-create/finalize, release-pr
-    versioning.rs     // bump/tag/changelog backends
-    envfile.rs        // .env read/write
+    cli.rs
+    cli_help.rs
+    dispatch.rs
+    config.rs
+    tasks.rs
+    envfile.rs
+    gitops.rs
+    versioning.rs
+    dockergen.rs
+    review.rs
+    vault.rs
+    walk.rs
+    templates.rs
+    commands/
+      agent.rs
+      config.rs
+      docker.rs
+      env.rs
+      git.rs
+      language.rs
+      os.rs
+      research.rs
+      review.rs
+      setup.rs
+      summary.rs
+      task.rs
+      vault.rs
+      version.rs
+      walk.rs
+    core/
+      changelog.rs
+      exec.rs
+      git.rs
+      output.rs
     scaffold/
-      mod.rs
-      rust.rs
+      elixir.rs
       python.rs
+      rust.rs
       typescript.rs
-    util.rs
-    logging.rs
-  templates/          // embedded templates (see below)
+    setup/
+      component.rs
+      context.rs
+      cuda.rs
+      docker.rs
+      system.rs
+      templates.rs
+      tools.rs
+  templates/
 ```
 
 ## Dependencies
 
-* `clap` + `clap_derive` for CLI.
-* `anyhow` for errors.
-* `serde`, `serde_json`, `toml`, `toml_edit` for config.
-* `regex` for simple parsing.
-* `duct` or native `std::process::Command` for processes.
-* `dirs` or `camino` for paths.
-* `chrono` for dates in changelog.
-* `git2` optional, but prefer shelling out to `git` and `gh` to keep behavior predictable.
-* `include_dir` or `rust-embed` to ship template files inside the binary.
-
-## Template embedding
-
-Use `rust-embed`:
-
-```rust
-#[derive(rust_embed::RustEmbed)]
-#[folder = "templates"]
-struct Templates;
-```
-
-Then write files if missing.
-
-## Error handling and UX
-
-* Every actionable step supports `--dry-run`.
-* Clear failure messages with the exact argv and exit code.
-* Exit codes:
-
-  * 0 success, 1 generic failure, 2 config/schema error, 3 git state error.
-
-## Minimal data models (serde)
-
-```rust
-#[derive(serde::Deserialize)]
-pub struct DevConfig {
-    pub default_language: Option<String>,
-    pub tasks: Option<std::collections::BTreeMap<String, Task>>,
-    pub languages: Option<std::collections::BTreeMap<String, Language>>,
-    pub git: Option<GitConfig>,
-}
-
-#[derive(serde::Deserialize)]
-pub struct Task {
-    pub commands: Vec<toml::Value>, // either ["ref"] or ["sh","args"] arrays
-    #[serde(default)]
-    pub allow_fail: bool,
-}
-
-#[derive(serde::Deserialize)]
-pub struct Pipelines {
-    pub fmt: Option<Vec<String>>,
-    pub lint: Option<Vec<String>>,
-    pub r#type: Option<Vec<String>>,
-    pub test: Option<Vec<String>>,
-    pub fix: Option<Vec<String>>,
-    pub check: Option<Vec<String>>,
-    pub ci: Option<Vec<String>>,
-}
-
-#[derive(serde::Deserialize)]
-pub struct Language {
-    pub install: Option<Vec<Vec<String>>>,
-    pub pipelines: Option<Pipelines>,
-}
-
-#[derive(serde::Deserialize)]
-pub struct GitConfig {
-    pub main_branch: Option<String>,
-    pub release_branch: Option<String>,
-    pub version_file: Option<String>,
-    pub changelog: Option<String>,
-}
-```
-
-## Command runner rules
-
-* Resolve task name to a flattened list of `argv` commands:
-
-  * `["ref"]` expands by recursively inlining referenced task.
-  * `["cargo","fmt","--","--check"]` executes directly.
-* Detect cycles with DFS stack.
-* If `--language` is set, verbs map to that language’s pipelines; else `default_language`.
-
-## Example main skeleton
-
-```rust
-// src/main.rs
-mod cli;
-mod config;
-mod tasks;
-mod runner;
-mod gitops;
-mod versioning;
-mod envfile;
-mod scaffold;
-mod logging;
-
-fn main() -> anyhow::Result<()> {
-    let app = cli::build();
-    app.run()
-}
-```
-
-```rust
-// src/cli.rs
-use clap::{Parser, Subcommand};
-
-#[derive(Parser)]
-#[command(name = "dev")]
-pub struct App {
-  #[arg(short='f', long="file")]
-  pub file: Option<std::path::PathBuf>,
-  #[arg(short='l', long="language")]
-  pub language: Option<String>,
-  #[arg(short='n', long="dry-run")]
-  pub dry_run: bool,
-  #[arg(short='v', long="verbose", action=clap::ArgAction::Count)]
-  pub verbose: u8,
-  #[command(subcommand)]
-  pub cmd: Cmd
-}
-
-#[derive(Subcommand)]
-pub enum Cmd {
-  List,
-  Run { task: String },
-  Fmt, Lint, Type, Test, Fix, Check, Ci,
-  All { verb: String },
-  Install { language: Option<String> },
-  Language { #[command(subcommand)] lang: LangCmd },
-  Git { #[command(subcommand)] git: GitCmd },
-  Version { #[command(subcommand)] ver: VerCmd },
-  Env { #[command(subcommand)] env: EnvCmd },
-  Config { #[command(subcommand)] cfg: ConfigCmd },
-}
-
-#[derive(Subcommand)]
-pub enum LangCmd {
-  Set { name: String },
-}
-
-#[derive(Subcommand)]
-pub enum ConfigCmd {
-  Show,
-  Check,
-  Generate { path: Option<std::path::PathBuf>, #[arg(long="force")] force: bool },
-  Reload,
-}
-
-// … GitCmd, VerCmd, EnvCmd enums …
-```
-
-## MVP milestones
-
-1. Load config, list tasks, run single task, composite flattening, dry-run.
-2. Verb dispatch, `all_*` aggregators, exit codes, logging polish.
-3. Language installers with embedded templates.
-4. Git flows and version bump + changelog.
-5. `.env` add/rm/list.
-6. Ship a `Makefile` or `justfile`, push to GitHub. Then, immediately add a CI that runs `dev ci --all` on PRs.
+- `clap` and `clap_derive` for CLI parsing.
+- `anyhow` for errors.
+- `serde`, `serde_json`, `toml`, and `toml_edit` for config.
+- `camino` and `dirs` for paths.
+- `chrono` for changelog dates.
+- `rust-embed` for template embedding.
+- Native `std::process::Command` helpers for subprocess execution.

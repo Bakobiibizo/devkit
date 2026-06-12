@@ -1,72 +1,204 @@
 # Dev CLI Usage Guide
 
-This guide introduces the top-level workflows provided by the `dev` binary and explains how to configure and operate the tool effectively.
+This guide covers the `dev` command surface as implemented by `crates/dev`.
 
-## Prerequisites
-
-- Rust toolchain with cargo available on `PATH`.
-- (Optional) [`gh`](https://cli.github.com) installed for release PR automation.
-- Default config at `~/.dev/config.toml` (generate one with `dev config generate`).
-
-## Quick Start
+## Install And First Run
 
 ```bash
-# Generate example config (~/.dev/config.toml by default)
+git clone https://github.com/bakobiibizo/devkit
+cd devkit
+cargo build --workspace
+cargo install --path crates/dev
+
 dev config generate
-
-# Inspect the current configuration
-dev config show
-
-# Run the lint workflow (language inferred from config)
-dev lint
-
-# Show CLI help plus a compact configured workflow summary
+dev config check
+dev list
 dev --help
 ```
 
+Run from source with `cargo run -p devkit-cli -- <args>`.
+
 Global flags:
 
-- `--dry-run` prints commands without executing.
-- `--language <name>` overrides the default language.
-- `--no-color` disables coloured output.
-- `-C <path>` runs commands from another directory.
+- `-C, --chdir <path>` runs from another directory.
+- `-f, --file <path>` selects a config file.
+- `--project <name>` selects a configured project.
+- `-l, --language <name>` overrides `default_language`.
+- `-n, --dry-run` prints planned commands where supported.
+- `-v, --verbose` increases logging verbosity.
+- `--no-color` disables colored output.
 
-## Core Workflows
+## Command Overview
 
-### Task Execution
+There are 19 command families in the CLI enum:
 
-- `dev list` – list known tasks and pipelines.
-- `dev run <task>` – run a raw task defined in config with normal subprocess output.
-- `dev fmt|lint|test|check|ci` – run the language pipeline with summarized subprocess output.
-- `dev all <verb>` – run `fmt`, `lint`, etc. across every configured language with summarized subprocess output.
-- `dev --help` – show built-in commands plus compact summaries of first-class verbs, configured tasks, language pipelines, and agents from the active config.
+- `list`, `run`, `start`, `all`
+- `install`, `language`
+- `git`, `version`
+- `env`, `config`
+- `setup`, `docker`, `os`
+- `review`, `walk`
+- `summary`, `agent`
+- `vault`
+- `research` (hidden from top-level help; internal research scaffold)
 
-### Summarized Command Runner
+The first-class verbs `fmt`, `lint`, `type`, `test`, `fix`, `check`, and `ci` are hidden clap commands normalized through the dynamic help layer and dispatch to language pipelines.
 
-- `dev summary run <task>` – run a configured task while capturing stdout/stderr and printing a compact summary.
-- `dev summary exec -- <command...>` – run an ad-hoc command through a shell and summarize the output.
-- Add `--raw` to include the captured stdout/stderr after the summary.
+## Tasks And Pipelines
 
-The summary runner is intended for long test suites or noisy build failures where the caller only needs the important errors. Configure it with:
+```bash
+dev list
+dev run rust_fmt
+dev start --port 5173
+
+dev fmt
+dev lint
+dev type
+dev test
+dev fix
+dev check
+dev ci
+dev all check
+```
+
+`dev run <task>` streams raw configured task output. First-class verbs use the configured language pipeline and summarized subprocess reporting. `dev all <verb>` runs the monorepo aggregate task for a verb.
+
+## Configuration
+
+```bash
+dev config
+dev config show
+dev config path
+dev config check
+dev config generate [path] [--force]
+dev config reload
+dev config add <name> -- <command...>
+dev config add <name> --append -- <command...>
+```
+
+Config discovery checks the explicit `--file` first, then project-local `.dev/config.<os>.toml`, `.dev/config.toml`, legacy `tools/dev/config.<os>.toml`, legacy `tools/dev/config.toml`, and finally `~/.dev/config.toml`. If only the home default is missing, the CLI can proceed with an empty config for workflows that do not require configured tasks.
+
+## Language Setup
+
+```bash
+dev language set rust
+dev install
+dev install python --force
+dev install typescript --no-scaffold
+dev install elixir
+```
+
+`dev install` defaults to `--language` or `default_language`, writes language scaffold files unless `--no-scaffold` is set, and runs optional provisioning commands from config.
+
+## Environment Files
+
+```bash
+dev env
+dev env --raw
+dev env get DATABASE_URL
+dev env add DATABASE_URL postgres://localhost/dev
+dev env rm DATABASE_URL
+
+dev env profiles
+dev env switch staging
+dev env save staging
+
+dev env check
+dev env init
+dev env template
+dev env diff [.env.example]
+dev env sync [.env.example]
+```
+
+`.env` resolution walks from the current directory to the git root. Writes preserve comments and ordering. `dev env check` uses `[env].required` and `[env].optional` from config.
+
+## Git And Versioning
+
+```bash
+dev git branch-create feature/docs
+dev git branch-create feature/docs --from main --push
+dev git branch-finalize
+dev git branch-finalize feature/docs --into main --delete
+dev git release-pr patch --from main --to release-candidate
+dev git release-pr minor --no-open
+
+dev version show
+dev version bump patch
+dev version bump minor --tag
+dev version bump patch --custom 1.2.3 --no-commit
+dev version changelog --unreleased
+dev version changelog --since v1.2.0
+```
+
+`branch-create` and `branch-finalize` resolve their base from the command flag, `[git].main_branch`, `origin/HEAD`, local `main`/`master`, then the current branch. They skip remote fetch/pull work when no `origin` remote exists. `release-pr` requires a bump level, updates version/changelog state, pushes the release branch, and uses `gh` to create the PR unless `--no-open` is set.
+
+## Setup, Docker, And OS Overrides
+
+```bash
+dev setup
+dev setup status
+dev setup list
+dev setup config
+dev setup run rustup uv docker --skip-installed
+dev setup all --skip-installed
+dev setup inference comfyui --dest ~/repos/inference/dev-comfyui
+
+dev docker init
+dev docker build
+dev docker develop
+dev docker dev --service core --no-up
+dev docker compose up build -d
+
+dev os show
+dev os linux
+dev os windows
+```
+
+Setup has 15 named components: `system_packages`, `git_lfs`, `uv`, `rustup`, `node`, `pnpm`, `pm2`, `docker`, `nvidia_container_runtime`, `cuda_toolkit_host`, `zoxide`, `atuin`, `ngrok`, `rm_guard`, and `op`. Dependencies are resolved unless `--no-deps` is set. Docker scaffolding writes `docker/Dockerfile.core`, `docker-compose.yml`, and `.env` entries for `CORE_IMAGE`, `UID`, and `GID`.
+
+`dev os linux|windows` writes platform-specific config overlays beside the active config. The resolver prefers `.dev/config.<os>.toml` when present.
+
+## Review And Walk
+
+```bash
+dev review
+dev review --main --output review.md
+dev review --include-working
+
+dev walk
+dev walk crates/dev -o manifest.md --extensions .rs .toml
+dev walk . --no-content --max-depth 4
+```
+
+`dev review` produces a Markdown code-review overlay from staged diffs, working-tree diffs, or comparison to the main branch. `dev walk` creates an LLM-ready directory manifest and includes file contents by default.
+
+## Summary And Agents
+
+```bash
+dev summary run all_check
+dev summary run rust_test --raw
+dev summary exec -- cargo test --workspace
+dev summary exec --raw -- pnpm test
+
+dev agent run default --prompt "Fix the failing tests"
+dev agent run codex-loop --iterations 3 --prompt-file task.md
+dev agent run default --attach --prompt-file -
+dev agent list
+dev agent status <job-id> --tail 120
+```
+
+Configure summary behavior with `[summary]`:
 
 ```toml
 [summary]
 shell = "bash"
 max_output_bytes = 65536
 tail_bytes = 12288
-# Optional command receives a prompt on stdin and writes a summary to stdout.
+# llm_command receives a prompt on stdin and writes a summary on stdout.
 # llm_command = "your-llm-summarizer"
 ```
 
-### Async Agents
-
-- `dev agent run <agent> --prompt "..."` – launch a configured agent asynchronously. Prints a job id and log path.
-- `dev agent run <agent> --attach --prompt-file task.md` – run the agent in the foreground.
-- `dev agent run <agent> --iterations 5 --prompt-file task.md` – override a loop adapter iteration count.
-- `dev agent list` – list background agent jobs with `running`, `ok`, or `failed(<code>)` status.
-- `dev agent status <job-id> [--tail 80]` – show job state plus a compact log summary.
-
-Example Codex and loop agents:
+Configure agents with `[agents.<name>]`:
 
 ```toml
 default_agent = "default"
@@ -75,72 +207,38 @@ default_agent = "default"
 adapter = "codex"
 cwd = "."
 extra_args = ["--sandbox", "read-only"]
-# Optional: leave unset to use the Codex CLI default for the signed-in account.
-# model = "gpt-5"
 
 [agents.codex-loop]
 adapter = "loop"
-command = ["bash", "-lc", "if [ -n \"$DEV_AGENT_MODEL\" ]; then codex exec --model \"$DEV_AGENT_MODEL\" --cd \"$DEV_AGENT_CWD\" -; else codex exec --cd \"$DEV_AGENT_CWD\" -; fi"]
+command = ["bash", "-lc", "codex exec --cd \"$DEV_AGENT_CWD\" -"]
 cwd = "."
 iterations = 3
 ```
 
-Codex endpoint/provider settings live in Codex config, not devkit config. Put provider definitions in `~/.codex/config.toml` or project `.codex/config.toml`, then optionally refer to that model from the devkit agent:
+Codex model providers belong in Codex config, not devkit config.
 
-```toml
-model = "gpt-5-mini"
-model_provider = "proxy"
+## Vault
 
-[model_providers.proxy]
-name = "OpenAI-compatible proxy"
-base_url = "http://127.0.0.1:8000/v1"
-env_key = "OPENAI_API_KEY"
-wire_api = "responses"
+```bash
+dev vault list
+dev vault list --account production
+dev vault get api-token --field password
+dev vault set api-token secret --account production
+dev vault delete api-token
 ```
 
-### Configuration Helpers
+Vault commands shell out to the 1Password CLI (`op`). Account tokens are read from the environment using `OP_DEVELOPMENT` or `OP_PRODUCTION`; `development` is the default account.
 
-- `dev config show|check` – display a summary and validate the config.
-- `dev config generate [path] [--force]` – write the embedded example config.
-- `dev config reload` – reparse the config and print a summary.
+## Research
 
-### Environment File Utilities
+```bash
+dev research init ./experiment --name experiment
+dev research init . --package experiment_core --skip-install
+```
 
-- `dev env` – list environment variables discovered in the nearest `.env` file.
-- `dev env add KEY VALUE` – add or update a variable.
-- `dev env rm KEY` – remove a variable.
-
-### Language Installers
-
-- `dev install [language]` – scaffold language-specific config files and run optional provisioning commands defined in config. Supports `--dry-run` to preview actions.
-
-## Git Automation
-
-- `dev git branch-create <name> [--from <base>] [--push] [--allow-dirty]`
-  - Fetches & rebases the base branch, checks out the new branch, and (optionally) pushes with upstream tracking.
-- `dev git branch-finalize [<name>] [--into <base>] [--delete] [--allow-dirty]`
-  - Merges the feature branch into the base branch with `--no-ff`, pushes, and optionally deletes local & remote branches. Defaults to the current branch name.
-- `dev git release-pr [--from <base>] [--to <head>] [--no-open]`
-  - Ensures a clean worktree, fetches and rebases the release branch, updates the changelog, pushes upstream, and opens a GitHub PR using `gh`. Skips PR creation if there are no commits between base and head.
-
-## Version Management
-
-- `dev version show` – print the current package version (defaults to `Cargo.toml`).
-- `dev version bump <major|minor|patch|prerelease> [--custom <x.y.z>] [--tag] [--no-commit] [--no-changelog]`
-  - Updates the manifest, changelog, stages changes, and optionally commits/tags.
-- `dev version changelog [--since <tag>] [--unreleased]` – display commit summaries for the requested range.
-
-## Logging
-
-`dev` installs a `tracing` subscriber on first use. Configure verbosity via `RUST_LOG`, e.g. `RUST_LOG=dev=debug`.
-
-## FAQ
-
-- **How do I overwrite the config?** Use `dev config generate --force`.
-- **How do I run workflows without mutating files?** Add `--dry-run` anywhere on the command line.
-- **How do I install language scaffolds?** Run `dev install` (optionally specify `rust`, `python`, `typescript`, or `elixir`).
+`research` is an internal, hidden command for scaffolding a project-local research workspace with `research-harness`. It remains available for scripted use but does not appear in top-level help.
 
 ## Further Reading
 
-- [`docs/spec.md`](spec.md) – full technical specification.
-- [`docs/example.config.toml`](example.config.toml) – detailed configuration reference.
+- [`docs/spec.md`](spec.md) for the functional and technical spec.
+- [`docs/example.config.toml`](example.config.toml) for the embedded starter config.
