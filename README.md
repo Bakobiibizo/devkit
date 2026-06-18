@@ -95,6 +95,7 @@ dev update --yes
 # Review and context reports
 dev review --main --output review.md
 dev walk crates/dev -o manifest.md --extensions .rs .toml
+dev walk --stdout
 ```
 
 `dev run <task>` streams the configured command directly. First-class verbs such as `dev test` capture noisy output and print a compact status summary.

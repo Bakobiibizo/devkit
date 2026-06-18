@@ -71,7 +71,7 @@ Commands:
   setup config
 
   review [--output <PATH>] [--include-working] [--main]
-  walk [DIR] [-o, --output <PATH>] [--format <FMT>] [--max-depth <N>] [--no-content]
+  walk [DIR] [-o, --output <PATH>] [--stdout] [--format <FMT>] [--max-depth <N>] [--no-content]
        [--extensions <EXT...>] [--include-hidden]
 
 ```
@@ -215,7 +215,7 @@ Dependency rules:
 
 ## Review And Walk
 
-`review` generates Markdown code review reports from staged diffs, working tree diffs, or branch comparison to main. `walk` generates Markdown directory manifests with file contents by default and supports extension filtering, max-depth limits, and hidden-file inclusion.
+`review` generates Markdown code review reports from staged diffs, working tree diffs, or branch comparison to main. `walk` generates Markdown directory manifests with file contents by default and supports extension filtering, max-depth limits, hidden-file inclusion, and stdout output via `--stdout`.
 
 ## Verb Summaries
 

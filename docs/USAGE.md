@@ -168,9 +168,10 @@ dev review --include-working
 dev walk
 dev walk crates/dev -o manifest.md --extensions .rs .toml
 dev walk . --no-content --max-depth 4
+dev walk --stdout
 ```
 
-`dev review` produces a Markdown code-review overlay from staged diffs, working-tree diffs, or comparison to the main branch. `dev walk` creates an LLM-ready directory manifest and includes file contents by default.
+`dev review` produces a Markdown code-review overlay from staged diffs, working-tree diffs, or comparison to the main branch. `dev walk` creates an LLM-ready directory manifest and includes file contents by default. Use `dev walk --stdout` to print the manifest instead of writing `manifest.md`.
 
 ## Verb Summaries
 

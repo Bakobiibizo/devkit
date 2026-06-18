@@ -152,7 +152,7 @@ pub enum Command {
     },
     /// Generate a directory structure map with file contents (for LLM context).
     #[command(
-        after_help = "Examples:\n  dev walk\n  dev walk crates/dev -o manifest.md --extensions .rs .toml\n  dev walk . --no-content --max-depth 4"
+        after_help = "Examples:\n  dev walk\n  dev walk crates/dev -o manifest.md --extensions .rs .toml\n  dev walk . --no-content --max-depth 4\n  dev walk --stdout"
     )]
     Walk {
         /// Directory to map (default: current directory)
@@ -161,6 +161,9 @@ pub enum Command {
         /// Output file path (default: manifest.md)
         #[arg(short = 'o', long = "output", default_value = "manifest.md")]
         output: PathBuf,
+        /// Print the manifest to stdout instead of writing a file
+        #[arg(long = "stdout")]
+        stdout: bool,
         /// Output format
         #[arg(long = "format", default_value = "markdown")]
         format: String,

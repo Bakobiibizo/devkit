@@ -68,6 +68,26 @@ fn update_check_with_explicit_version_is_non_networked() {
 }
 
 #[test]
+fn walk_stdout_prints_manifest_without_writing_default_file() {
+    let temp = TempDir::new().expect("tempdir");
+    let project = temp.path();
+    write_file(&project.join("src/lib.rs"), "pub fn hello() {}\n");
+
+    dev()
+        .args(["-C", project.to_str().unwrap(), "walk", "--stdout"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("# Directory Structure"))
+        .stdout(predicates::str::contains("lib.rs"))
+        .stdout(predicates::str::contains("Generating directory manifest").not());
+
+    assert!(
+        !project.join("manifest.md").exists(),
+        "--stdout should not write the default manifest file"
+    );
+}
+
+#[test]
 fn config_generate_check_and_task_run_round_trip() {
     let temp = TempDir::new().expect("tempdir");
     let project = temp.path();

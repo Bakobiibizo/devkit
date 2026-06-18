@@ -124,6 +124,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Walk {
             directory,
             output,
+            stdout,
             format: _format,
             max_depth,
             no_content,
@@ -134,6 +135,7 @@ pub fn run(cli: Cli) -> Result<()> {
             commands::walk::WalkRequest {
                 directory,
                 output,
+                stdout,
                 max_depth,
                 no_content,
                 extensions,
