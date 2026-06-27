@@ -188,6 +188,7 @@ fn summarize_with_llm_command(
 
 fn local_summary(command: &str, result: &CapturedCommandResult, output: &str) -> String {
     let mut lines = output.lines();
+    let failing_tests = extract_failing_tests(output);
     let interesting = output
         .lines()
         .filter(|line| {
@@ -198,6 +199,8 @@ fn local_summary(command: &str, result: &CapturedCommandResult, output: &str) ->
                 || lowered.contains("exception")
                 || lowered.contains("warning")
                 || lowered.contains("traceback")
+                || lowered.starts_with("---- ")
+                || lowered.trim() == "failures:"
         })
         .take(12)
         .collect::<Vec<_>>();
@@ -218,6 +221,14 @@ fn local_summary(command: &str, result: &CapturedCommandResult, output: &str) ->
         crate::dispatch::exit_code_display(result.status)
     ));
     out.push_str(&format!("- duration: {:.2?}\n", result.elapsed));
+    if !failing_tests.is_empty() {
+        out.push_str("- failing tests:\n");
+        for test in failing_tests.iter().take(12) {
+            out.push_str("  - ");
+            out.push_str(test);
+            out.push('\n');
+        }
+    }
     if output.trim().is_empty() {
         out.push_str("- output: <empty>\n");
     } else {
@@ -229,4 +240,63 @@ fn local_summary(command: &str, result: &CapturedCommandResult, output: &str) ->
         }
     }
     out
+}
+
+fn extract_failing_tests(output: &str) -> Vec<String> {
+    let mut tests = Vec::new();
+    let mut in_failures_list = false;
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if let Some(name) = trimmed
+            .strip_prefix("test ")
+            .and_then(|rest| rest.strip_suffix(" ... FAILED"))
+        {
+            push_unique(&mut tests, name.trim());
+            continue;
+        }
+        if let Some(name) = trimmed
+            .strip_prefix("---- ")
+            .and_then(|rest| rest.strip_suffix(" stdout ----"))
+        {
+            push_unique(&mut tests, name.trim());
+            continue;
+        }
+        if trimmed == "failures:" {
+            in_failures_list = true;
+            continue;
+        }
+        if in_failures_list {
+            if trimmed.is_empty() {
+                continue;
+            }
+            if trimmed.starts_with("test result:") || trimmed.starts_with("error:") {
+                in_failures_list = false;
+                continue;
+            }
+            if !trimmed.contains(' ') && !trimmed.contains(':') {
+                push_unique(&mut tests, trimmed);
+            }
+        }
+    }
+    tests
+}
+
+fn push_unique(values: &mut Vec<String>, value: &str) {
+    if !value.is_empty() && !values.iter().any(|existing| existing == value) {
+        values.push(value.to_string());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_failing_tests;
+
+    #[test]
+    fn extracts_rust_test_failures_from_cargo_output() {
+        let output = "running 2 tests\ntest ok_test ... ok\ntest ldgr_code::filesystem_activity_keeps_silent_commands_alive ... FAILED\n\nfailures:\n\n---- ldgr_code::filesystem_activity_keeps_silent_commands_alive stdout ----\nthread panicked\n\nfailures:\n    ldgr_code::filesystem_activity_keeps_silent_commands_alive\n\ntest result: FAILED. 1 passed; 1 failed\n";
+        assert_eq!(
+            extract_failing_tests(output),
+            vec!["ldgr_code::filesystem_activity_keeps_silent_commands_alive"]
+        );
+    }
 }

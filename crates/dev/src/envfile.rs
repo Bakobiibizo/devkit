@@ -101,23 +101,6 @@ impl EnvFile {
 }
 
 pub fn locate(start: &Utf8Path) -> Result<Utf8PathBuf> {
-    let mut current: Option<&Utf8Path> = Some(start);
-    while let Some(dir) = current {
-        let candidate = dir.join(ENV_FILENAME);
-        if candidate.exists() {
-            return Ok(candidate);
-        }
-        current = dir.parent();
-    }
-
-    if let Some(git_root) = find_git_root(start) {
-        let candidate = git_root.join(ENV_FILENAME);
-        if candidate.exists() {
-            return Ok(candidate);
-        }
-        return Ok(candidate);
-    }
-
     Ok(start.join(ENV_FILENAME))
 }
 
@@ -140,17 +123,6 @@ fn parse_lines(contents: &str) -> Vec<Line> {
         .collect()
 }
 
-fn find_git_root(start: &Utf8Path) -> Option<Utf8PathBuf> {
-    let mut current = Some(start);
-    while let Some(dir) = current {
-        if dir.join(".git").exists() {
-            return Some(dir.to_owned());
-        }
-        current = dir.parent();
-    }
-    None
-}
-
 pub fn current_working_dir() -> Result<Utf8PathBuf> {
     let cwd = std::env::current_dir().context("determining current directory")?;
     Utf8PathBuf::from_path_buf(cwd).map_err(|_| anyhow!("current directory is not valid UTF-8"))
@@ -161,4 +133,25 @@ enum Line {
     Entry { key: String, value: String },
     Comment(String),
     Blank,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::locate;
+    use tempfile::TempDir;
+
+    #[test]
+    fn locate_without_git_uses_start_even_when_parent_has_env() {
+        let temp = TempDir::new().expect("tempdir");
+        let parent = temp.path();
+        let child = parent.join("child");
+        std::fs::create_dir_all(&child).expect("child dir");
+        std::fs::write(parent.join(".env"), "PARENT=1\n").expect("parent env");
+
+        let located = locate(camino::Utf8Path::from_path(&child).expect("utf8 path")).unwrap();
+        assert_eq!(
+            located,
+            camino::Utf8PathBuf::from_path_buf(child.join(".env")).unwrap()
+        );
+    }
 }
