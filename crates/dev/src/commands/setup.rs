@@ -247,7 +247,13 @@ pub(crate) fn handle(
             println!("===================\n");
             println!("Architecture: {}", setup_ctx.arch.as_str());
             println!("Platform: {}", setup_ctx.platform.as_str());
-            println!("Package Manager: {}", setup_ctx.platform.package_manager());
+            println!(
+                "Package Manager: {}",
+                setup_ctx
+                    .platform
+                    .package_manager()
+                    .unwrap_or("unsupported")
+            );
             println!("Sudo Available: {}", setup_ctx.sudo);
             println!("\nDefault Components:");
             for component in &setup_ctx.config.default_components {

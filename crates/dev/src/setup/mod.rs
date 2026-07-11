@@ -65,7 +65,7 @@ pub fn show_status(ctx: &SetupContext) -> Result<()> {
         "Platform: {} / {} (package manager: {})\n",
         ctx.platform.as_str(),
         ctx.arch.as_str(),
-        ctx.platform.package_manager()
+        ctx.platform.package_manager().unwrap_or("unsupported")
     );
 
     for component in all_components {

@@ -35,17 +35,24 @@ pub enum Platform {
 
 impl Platform {
     pub fn detect() -> Result<Self> {
-        // Try to read /etc/os-release
         if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
-            if content.contains("ID=ubuntu") {
-                return Ok(Platform::Ubuntu);
-            }
-            if content.contains("ID=debian") {
-                return Ok(Platform::Debian);
-            }
+            return Ok(Self::from_os_release(&content));
         }
 
         Ok(Platform::Unknown)
+    }
+
+    fn from_os_release(content: &str) -> Self {
+        let id = content.lines().find_map(|line| {
+            let (key, value) = line.split_once('=')?;
+            (key == "ID").then(|| value.trim_matches(['\"', '\'']).to_ascii_lowercase())
+        });
+
+        match id.as_deref() {
+            Some("ubuntu") => Platform::Ubuntu,
+            Some("debian") => Platform::Debian,
+            _ => Platform::Unknown,
+        }
     }
 
     pub fn as_str(&self) -> &'static str {
@@ -56,10 +63,10 @@ impl Platform {
         }
     }
 
-    pub fn package_manager(&self) -> &'static str {
+    pub fn package_manager(&self) -> Option<&'static str> {
         match self {
-            Platform::Ubuntu | Platform::Debian => "apt",
-            Platform::Unknown => "apt", // default assumption
+            Platform::Ubuntu | Platform::Debian => Some("apt"),
+            Platform::Unknown => None,
         }
     }
 }
@@ -175,6 +182,19 @@ impl Default for SetupConfig {
 impl SetupConfig {
     /// Validate configuration
     pub fn validate(&self) -> Result<()> {
+        fn reject_duplicates(values: &[String], field: &str) -> Result<()> {
+            let mut seen = std::collections::HashSet::new();
+            for value in values {
+                if !seen.insert(value) {
+                    anyhow::bail!("Duplicate component '{}' in {}", value, field);
+                }
+            }
+            Ok(())
+        }
+
+        reject_duplicates(&self.default_components, "default_components")?;
+        reject_duplicates(&self.skip_components, "skip_components")?;
+
         // Validate default_components
         for component_name in &self.default_components {
             use crate::setup::Component;
@@ -195,8 +215,13 @@ impl SetupConfig {
         }
 
         // Validate node_version is not empty
-        if self.node_version.is_empty() {
-            anyhow::bail!("node_version cannot be empty");
+        if self.node_version.is_empty()
+            || !self
+                .node_version
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || ".-_".contains(character))
+        {
+            anyhow::bail!("node_version must contain only ASCII letters, numbers, '.', '-' or '_'");
         }
 
         // Check for conflicts between default and skip
@@ -210,6 +235,49 @@ impl SetupConfig {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Platform, SetupConfig};
+
+    #[test]
+    fn platform_detection_uses_exact_id() {
+        assert_eq!(
+            Platform::from_os_release("NAME=Ubuntu\nID=ubuntu\n"),
+            Platform::Ubuntu
+        );
+        assert_eq!(
+            Platform::from_os_release("NAME=Not Ubuntu\nID=fedora\nID_LIKE=debian\n"),
+            Platform::Unknown
+        );
+        assert_eq!(Platform::Unknown.package_manager(), None);
+    }
+
+    #[test]
+    fn setup_config_rejects_duplicates_and_unsafe_versions() {
+        let mut config = SetupConfig {
+            default_components: vec!["uv".into(), "uv".into()],
+            ..SetupConfig::default()
+        };
+        assert!(
+            config
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("Duplicate")
+        );
+
+        config.default_components = vec!["uv".into()];
+        config.node_version = "22; touch /tmp/bad".into();
+        assert!(
+            config
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("node_version")
+        );
     }
 }
 

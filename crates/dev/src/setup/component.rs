@@ -1,4 +1,4 @@
-use super::context::SetupContext;
+use super::context::{Platform, SetupContext};
 use anyhow::Result;
 
 /// Installation state of a component
@@ -154,6 +154,27 @@ impl Component {
 
     /// Install the component
     pub fn install(&self, ctx: &SetupContext) -> Result<()> {
+        let requires_apt = matches!(
+            self,
+            Component::SystemPackages
+                | Component::Docker
+                | Component::NvidiaContainerRuntime
+                | Component::Ngrok
+        );
+        if requires_apt && ctx.platform.package_manager().is_none() {
+            anyhow::bail!(
+                "{} is not supported on platform '{}'; no package-manager fallback will be assumed",
+                self.name(),
+                ctx.platform.as_str()
+            );
+        }
+        if matches!(self, Component::Docker) && ctx.platform != Platform::Ubuntu {
+            anyhow::bail!(
+                "the Docker installer currently supports Ubuntu only (detected '{}')",
+                ctx.platform.as_str()
+            );
+        }
+
         match self {
             Component::SystemPackages => super::system::install_system_packages(ctx),
             Component::GitLfs => super::system::install_git_lfs(ctx),
