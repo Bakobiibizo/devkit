@@ -348,3 +348,109 @@ edition = "2024"
         "version bump left a clean worktree"
     );
 }
+
+#[test]
+fn guard_scans_only_added_lines_and_uses_base_policy() {
+    let temp = TempDir::new().expect("tempdir");
+    let repo = temp.path();
+    init_repo(repo);
+    write_file(
+        &repo.join(".dev/guard.toml"),
+        r#"version = 1
+
+[[rules]]
+id = "SKIP-001"
+severity = "deny"
+pattern = '(?i)\bTODO\b'
+message = "New unfinished work marker"
+guidance = "Finish the work before submission."
+include = ["src/**"]
+
+[[rules]]
+id = "ERR-001"
+severity = "warn"
+pattern = 'let\s+_\s*='
+message = "New discarded result"
+include = ["src/**"]
+"#,
+    );
+    write_file(
+        &repo.join("src/lib.rs"),
+        "// TODO: legacy marker must not be reported\npub fn existing() {}\n",
+    );
+    run_git(repo, &["add", "."]);
+    run_git(repo, &["commit", "-m", "initial policy and legacy code"]);
+    run_git(repo, &["switch", "-c", "feature/guard-test"]);
+
+    write_file(
+        &repo.join("src/lib.rs"),
+        "// TODO: legacy marker must not be reported\npub fn existing() {}\npub fn warning() { let _ = cleanup(); }\n",
+    );
+    run_git(repo, &["add", "src/lib.rs"]);
+    run_git(repo, &["commit", "-m", "add warning candidate"]);
+
+    dev()
+        .args(["-C", repo.to_str().unwrap(), "guard", "--base", "main"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("0 blocking, 1 warning"))
+        .stdout(predicates::str::contains("ERR-001 src/lib.rs:3"))
+        .stdout(predicates::str::contains("SKIP-001").not())
+        .stdout(predicates::str::contains("legacy marker").not());
+
+    // Attempt to weaken the proposed branch's policy. The base policy must still win.
+    let weakened = fs::read_to_string(repo.join(".dev/guard.toml"))
+        .expect("read policy")
+        .replace("(?i)\\bTODO\\b", "THIS_PATTERN_CANNOT_MATCH");
+    write_file(&repo.join(".dev/guard.toml"), &weakened);
+    write_file(
+        &repo.join("src/lib.rs"),
+        "// TODO: legacy marker must not be reported\npub fn existing() {}\npub fn warning() { let _ = cleanup(); }\n// TODO: new skipped work\n",
+    );
+    run_git(repo, &["add", "."]);
+    run_git(
+        repo,
+        &["commit", "-m", "add blocking candidate and weaken policy"],
+    );
+
+    dev()
+        .args([
+            "-C",
+            repo.to_str().unwrap(),
+            "guard",
+            "--base",
+            "main",
+            "--format",
+            "github",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicates::str::contains("1 blocking, 1 warning"))
+        .stdout(predicates::str::contains("base policy"))
+        .stdout(predicates::str::contains("review it separately"))
+        .stdout(predicates::str::contains("::error file=src/lib.rs,line=4"))
+        .stdout(predicates::str::contains(
+            "::warning file=src/lib.rs,line=3",
+        ))
+        .stdout(predicates::str::contains("legacy marker").not())
+        .stderr(predicates::str::contains(
+            "guard rejected newly added failure-mode matches",
+        ));
+
+    dev()
+        .args([
+            "-C",
+            repo.to_str().unwrap(),
+            "guard",
+            "--base",
+            "main",
+            "--format",
+            "detailed",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicates::str::contains("TODO: new skipped work"))
+        .stdout(predicates::str::contains(
+            "Guidance: Finish the work before submission.",
+        ));
+}

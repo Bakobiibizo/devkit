@@ -6,6 +6,7 @@ mod core;
 mod dispatch;
 mod envfile;
 mod gitops;
+mod guard;
 mod logging;
 mod review;
 mod scaffold;

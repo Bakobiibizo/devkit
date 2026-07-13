@@ -6,7 +6,7 @@ set -eu
 #   curl -fsSL https://raw.githubusercontent.com/bakobiibizo/devkit/main/scripts/install.sh | sh
 # Optional environment:
 #   DEVKIT_REPO=bakobiibizo/devkit
-#   DEVKIT_VERSION=v0.4.0        # default: latest
+#   DEVKIT_VERSION=v0.5.0        # default: latest
 #   DEVKIT_INSTALL_DIR=$HOME/.local/bin
 
 repo="${DEVKIT_REPO:-bakobiibizo/devkit}"

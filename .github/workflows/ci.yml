@@ -10,9 +10,37 @@ permissions:
   contents: read
 
 jobs:
+  guard:
+    name: Recent-change guard
+    runs-on: self-hosted
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build guard
+        run: cargo build -p devkit-cli
+      - name: Check only recent changes
+        env:
+          PUSH_BASE: ${{ github.event.before }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            base="origin/$GITHUB_BASE_REF"
+          else
+            base="$PUSH_BASE"
+            if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+              base="HEAD^"
+            fi
+          fi
+          target/debug/dev guard --base "$base" --format github
+
   fmt:
     name: Format
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
@@ -26,7 +54,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
@@ -41,7 +69,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
@@ -54,7 +82,7 @@ jobs:
 
   release-artifacts:
     name: Release artifact checks
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
@@ -74,8 +102,8 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
-    needs: [fmt, clippy, test, release-artifacts]
+    runs-on: self-hosted
+    needs: [guard, fmt, clippy, test, release-artifacts]
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)

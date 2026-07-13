@@ -39,7 +39,7 @@ The CLI exposes the core devkit command families:
 - `git`, `version`, `update`
 - `env`, `config`
 - `setup`
-- `review`, `walk`
+- `review`, `guard`, `walk`
 
 The first-class verbs `fmt`, `lint`, `type`, `test`, `fix`, `check`, and `ci` are hidden clap commands normalized through the dynamic help layer and dispatch to language pipelines.
 
@@ -130,7 +130,7 @@ dev version changelog --since v1.2.0
 
 dev update --check
 dev update --yes
-dev update --version v0.4.0 --install-dir ~/.local/bin
+dev update --version v0.5.0 --install-dir ~/.local/bin
 ```
 
 `dev update` checks GitHub releases, downloads the matching archive for the current platform, installs to the current binary directory or `~/.local/bin`, and keeps the previous binary as `dev.old`.
@@ -155,15 +155,19 @@ Tagged releases publish the `bakobiibizo/devkit-core` Docker image for GPU-orien
 
 ```bash
 docker pull bakobiibizo/devkit-core:latest
-docker pull bakobiibizo/devkit-core:v0.4.0
+docker pull bakobiibizo/devkit-core:v0.5.0
 ```
 
-## Review And Walk
+## Review, Guard, And Walk
 
 ```bash
 dev review
 dev review --main --output review.md
 dev review --include-working
+
+dev guard --base origin/main
+dev guard --base origin/main --format github
+dev guard --base main --format detailed
 
 dev walk
 dev walk crates/dev -o manifest.md --extensions .rs .toml
@@ -171,7 +175,26 @@ dev walk . --no-content --max-depth 4
 dev walk --stdout
 ```
 
-`dev review` produces a Markdown code-review overlay from staged diffs, working-tree diffs, or comparison to the main branch. `dev walk` creates an LLM-ready directory manifest and includes file contents by default. Use `dev walk --stdout` to print the manifest instead of writing `manifest.md`.
+`dev review` produces a Markdown code-review overlay from staged diffs, working-tree diffs, or comparison to the main branch. `dev guard` loads regex and path-glob rules from `.dev/guard.toml`, then checks only added lines since the merge base. `deny` matches fail the command while `warn` matches remain advisory. CI-oriented output includes every finding as one concise annotation without source dumps; `--format detailed` adds matched source and guidance for local diagnosis. The rule policy comes from the base revision by default, preventing a proposed branch from weakening its own gate; policy-file changes are highlighted for review and cannot affect their own check. Use `--rules-from-worktree` only while bootstrapping or deliberately developing policy.
+
+Minimal policy:
+
+```toml
+version = 1
+
+[[rules]]
+id = "SKIP-001"
+severity = "deny"
+pattern = '(?i)\b(TODO|FIXME)\b'
+message = "New unfinished-work marker"
+guidance = "Complete the work before submission."
+include = ["src/**"]
+exclude = ["src/fixtures/**"]
+```
+
+There is intentionally no inline source-code suppression syntax. Keep rules narrow with path globs and precise patterns so routine changes remain quiet.
+
+`dev walk` creates an LLM-ready directory manifest and includes file contents by default. Use `dev walk --stdout` to print the manifest instead of writing `manifest.md`.
 
 ## Verb Summaries
 
