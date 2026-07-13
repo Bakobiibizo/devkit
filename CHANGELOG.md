@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 2026-07-13 - v0.5.0
+
+### Added
+
+- Added `dev guard`, a fast diff-only regression check with repository-owned regex and path rules, compact GitHub annotations, and separate blocking and advisory severities.
+- Added a low-noise default guard policy for skipped work, swallowed failures, fail-open authorization, verification bypasses, unsafe shell tracing, and replacement SQL.
+- Added a required CI guard job that compares only recent commits with their merge base.
+
+### Changed
+
+- Guard policies are read from the base revision by default so a proposed change cannot weaken its own check.
+- Bumped `devkit` and `devkit-cli` to 0.5.0.
+
 ## 2026-06-12 - v0.4.0
 
 ### Added

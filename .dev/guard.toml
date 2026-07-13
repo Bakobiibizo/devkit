@@ -1,0 +1,83 @@
+# Fast, diff-only regression tripwires for this repository. Rules intentionally
+# favor precise skipped-work and failure-suppression signals over broad keywords.
+version = 1
+
+[[rules]]
+id = "SKIP-001"
+severity = "deny"
+pattern = '(?i)\b(TODO|FIXME)\b'
+message = "New unfinished-work marker"
+guidance = "Complete the work or omit the incomplete path before submission."
+include = ["crates/*/src/**", "src/**", "scripts/**"]
+
+[[rules]]
+id = "SKIP-002"
+severity = "deny"
+pattern = '\b(todo!|unimplemented!)\s*\('
+message = "New unimplemented Rust path"
+guidance = "Implement the path or return an explicit supported error."
+include = ["**/*.rs"]
+
+[[rules]]
+id = "SKIP-003"
+severity = "deny"
+pattern = '#\s*\[\s*ignore(?:\s*=|\s*\])|\b(?:describe|context|it|test)\.skip\s*\('
+message = "New skipped or ignored test"
+guidance = "Keep the test active or remove the unsupported behavior with its test."
+include = ["**/*.rs", "**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"]
+
+[[rules]]
+id = "SKIP-004"
+severity = "deny"
+pattern = '(?i)\b(?:PLACEHOLDER|CHANGEME|NOT_IMPLEMENTED)\b'
+message = "New placeholder value in production code"
+guidance = "Replace the placeholder with implemented behavior before submission."
+include = ["crates/*/src/**", "src/**", "scripts/**"]
+
+[[rules]]
+id = "ERR-001"
+severity = "warn"
+pattern = 'let\s+_\s*=\s*[^;]*(?:insert|update|delete|save|store|grant|revoke|send|emit|write)'
+message = "Possible discarded mutation or delivery failure"
+guidance = "Propagate the error or retain explicit diagnostics for intentional best-effort work."
+include = ["**/*.rs"]
+
+[[rules]]
+id = "ERR-002"
+severity = "deny"
+pattern = '(?:catch\s*\([^)]*\)\s*\{\s*\}|\.catch\s*\([^=]*=>\s*(?:\{\s*\}|undefined)\s*\))'
+message = "New empty error handler"
+guidance = "Return a typed failure or record useful diagnostics instead of swallowing it."
+include = ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"]
+
+[[rules]]
+id = "AUTH-001"
+severity = "deny"
+pattern = '(?:is_(?:blocked|banned|authorized|allowed)|has_(?:access|permission|grant))[^;]*\.unwrap_or\(false\)'
+message = "Possible fail-open authorization lookup"
+guidance = "Propagate lookup failure or deny access explicitly."
+include = ["**/*.rs"]
+
+[[rules]]
+id = "CI-001"
+severity = "warn"
+pattern = '(?:continue-on-error:\s*true|(?:^|\s)\|\|\s*true\b|--no-verify\b)'
+message = "New CI or verification bypass"
+guidance = "Keep required checks gating; narrowly document any best-effort command."
+include = [".github/**", "scripts/**", "**/*.yml", "**/*.yaml", "**/*.sh"]
+
+[[rules]]
+id = "SECRET-001"
+severity = "deny"
+pattern = '(?:^\s*set\s+-[^#]*x|^\s*#!\s*/bin/(?:ba)?sh\s+-[^\s]*x)'
+message = "New shell tracing may expose secrets"
+guidance = "Do not enable shell tracing in code that may handle credentials or key material."
+include = ["**/*.sh", "**/*.yml", "**/*.yaml"]
+
+[[rules]]
+id = "DATA-001"
+severity = "warn"
+pattern = '(?i)\b(?:INSERT\s+OR\s+REPLACE|REPLACE\s+INTO)\b'
+message = "Replacement SQL can weaken ownership or cascade integrity"
+guidance = "Prefer an ownership-bound update/upsert with explicit conflict and revision checks."
+include = ["**/*.rs", "**/*.sql"]

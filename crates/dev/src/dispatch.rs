@@ -121,6 +121,7 @@ pub fn run(cli: Cli) -> Result<()> {
             include_working,
             main,
         } => commands::review::handle(&ctx, output, include_working, main),
+        Command::Guard(args) => commands::guard::handle(&ctx, args),
         Command::Walk {
             directory,
             output,
@@ -171,6 +172,7 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Config { .. } => unreachable!("config commands handled earlier"),
         Command::Setup { .. } => unreachable!("setup commands handled earlier"),
         Command::Review { .. } => unreachable!("review commands handled earlier"),
+        Command::Guard(_) => unreachable!("guard command handled earlier"),
         Command::Walk { .. } => unreachable!("walk commands handled earlier"),
         Command::External(extra) => {
             bail!("unknown command: {}", extra.join(" "))

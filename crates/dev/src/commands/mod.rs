@@ -1,6 +1,7 @@
 pub(crate) mod config;
 pub(crate) mod env;
 pub(crate) mod git;
+pub(crate) mod guard;
 pub(crate) mod language;
 pub(crate) mod review;
 pub(crate) mod setup;

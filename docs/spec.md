@@ -71,6 +71,8 @@ Commands:
   setup config
 
   review [--output <PATH>] [--include-working] [--main]
+  guard [--base <REF>] [--head <REF>] [--config <PATH>] [--format <summary|github|detailed>]
+        [--rules-from-worktree]
   walk [DIR] [-o, --output <PATH>] [--stdout] [--format <FMT>] [--max-depth <N>] [--no-content]
        [--extensions <EXT...>] [--include-hidden]
 
@@ -213,9 +215,11 @@ Dependency rules:
 
 `setup inference <service>` clones or updates `https://github.com/bakobiibizo/dev-<service>.git`, strips explicit Compose `container_name:` entries to avoid collisions, and runs `scripts/setup.sh`.
 
-## Review And Walk
+## Review, Guard, And Walk
 
 `review` generates Markdown code review reports from staged diffs, working tree diffs, or branch comparison to main. `walk` generates Markdown directory manifests with file contents by default and supports extension filtering, max-depth limits, hidden-file inclusion, and stdout output via `--stdout`.
+
+`guard` scans only lines added between the merge base of `--base` (default `origin/main`) and `--head` (default `HEAD`). Repository-owned regex rules live in `.dev/guard.toml`, can be restricted by include/exclude globs, and use `deny` or `warn` severity. Summary and GitHub formats report every finding as one concise line; detailed output includes matched source and remediation guidance. By default the policy is loaded from the base revision so a proposed change cannot weaken its own gate. Policy-file changes are highlighted for review but evaluated with the base policy; `--rules-from-worktree` is reserved for bootstrapping or intentionally developing policy.
 
 ## Verb Summaries
 
@@ -237,6 +241,7 @@ crates/dev/
     gitops.rs
     versioning.rs
     review.rs
+    guard.rs
     walk.rs
     templates.rs
     commands/
@@ -245,6 +250,7 @@ crates/dev/
       git.rs
       language.rs
       review.rs
+      guard.rs
       setup.rs
       task.rs
       version.rs

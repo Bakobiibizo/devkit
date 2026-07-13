@@ -52,7 +52,7 @@ It is a good fit for:
 - teams that want `.env` profile management, validation, templates, diffs, and sync helpers;
 - release flows that benefit from scripted branch, version, changelog, and release-PR commands;
 - machines that need repeatable developer setup;
-- LLM-assisted code review where `dev review` and `dev walk` generate bounded Markdown context.
+- LLM-assisted development where `dev guard` catches new regression markers and `dev review`/`dev walk` generate bounded context.
 
 For LLM tool loops that need compact summaries of noisy commands or detached agent runs, use [`agntctl`](https://crates.io/crates/agntctl) alongside `devkit`. `devkit` owns the project workflow surface; `agntctl` owns bounded command and agent reports.
 
@@ -94,6 +94,7 @@ dev update --yes
 
 # Review and context reports
 dev review --main --output review.md
+dev guard --base origin/main
 dev walk crates/dev -o manifest.md --extensions .rs .toml
 dev walk --stdout
 ```
@@ -116,7 +117,7 @@ Tagged releases publish a multi-arch Docker image for `linux/amd64` and `linux/a
 
 ```bash
 docker pull bakobiibizo/devkit-core:latest
-docker pull bakobiibizo/devkit-core:v0.4.0
+docker pull bakobiibizo/devkit-core:v0.5.0
 ```
 
 The image is built from the NGC PyTorch base and includes the build toolchain, Git/Git LFS, `uv`, cache directories for Hugging Face/Torch/uv, `nvidia-ml-py` instead of the deprecated `pynvml` package, and patched `torchaudio`/`torchvision` installs for the CUDA PyTorch stack. It is intended for aarch64 inference hosts such as GB10 / DGX Spark class machines where the host GPU stack is already provisioned.

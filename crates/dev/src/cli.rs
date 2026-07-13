@@ -11,7 +11,7 @@ use crate::cli_help::{dynamic_help, should_append_dynamic_help};
     name = "dev",
     version,
     about = "Unified developer workflows",
-    long_about = "A single-binary developer workflow tool for configured tasks, language pipelines, git flows, setup, review reports, directory manifests, and environment management.",
+    long_about = "A single-binary developer workflow tool for configured tasks, language pipelines, git flows, setup, diff regression guards, review reports, directory manifests, and environment management.",
     after_help = "Examples:\n  dev config generate\n  dev list\n  dev lint\n  dev run all_check\n  dev git branch-create feature/docs\n  dev setup status"
 )]
 pub struct Cli {
@@ -105,7 +105,7 @@ pub enum Command {
     },
     /// Check for and install newer dev releases.
     #[command(
-        after_help = "Examples:\n  dev update --check\n  dev update --yes\n  dev update --version v0.4.0 --install-dir ~/.local/bin"
+        after_help = "Examples:\n  dev update --check\n  dev update --yes\n  dev update --version v0.5.0 --install-dir ~/.local/bin"
     )]
     Update(UpdateArgs),
     /// Environment variable helper commands backed by a `.env` file.
@@ -150,6 +150,11 @@ pub enum Command {
         #[arg(long = "main")]
         main: bool,
     },
+    /// Check newly added lines for configured failure-mode regressions.
+    #[command(
+        after_help = "Examples:\n  dev guard\n  dev guard --base origin/main\n  dev guard --format github\n  dev guard --format detailed"
+    )]
+    Guard(GuardArgs),
     /// Generate a directory structure map with file contents (for LLM context).
     #[command(
         after_help = "Examples:\n  dev walk\n  dev walk crates/dev -o manifest.md --extensions .rs .toml\n  dev walk . --no-content --max-depth 4\n  dev walk --stdout"
@@ -195,6 +200,34 @@ pub enum Verb {
     Fix,
     Check,
     Ci,
+}
+
+#[derive(Args, Debug)]
+pub struct GuardArgs {
+    /// Git revision to compare with HEAD. The merge base is used.
+    #[arg(long = "base", default_value = "origin/main")]
+    pub base: String,
+    /// Git revision containing the proposed changes.
+    #[arg(long = "head", default_value = "HEAD")]
+    pub head: String,
+    /// Rule configuration path, relative to the repository root by default.
+    #[arg(long = "config", default_value = ".dev/guard.toml")]
+    pub config: PathBuf,
+    /// Output style. Summary and GitHub output stay deliberately compact.
+    #[arg(long = "format", value_enum, default_value_t = GuardFormat::Summary)]
+    pub format: GuardFormat,
+    /// Load policy from the proposed worktree instead of the base revision.
+    /// Intended for developing a new policy before it has landed.
+    #[arg(long = "rules-from-worktree", default_value_t = false)]
+    pub rules_from_worktree: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+pub enum GuardFormat {
+    #[default]
+    Summary,
+    Github,
+    Detailed,
 }
 
 impl Verb {
