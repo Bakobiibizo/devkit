@@ -12,7 +12,7 @@ permissions:
 jobs:
   guard:
     name: Recent-change guard
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
@@ -40,7 +40,7 @@ jobs:
 
   fmt:
     name: Format
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
@@ -54,7 +54,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
@@ -69,7 +69,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
@@ -82,7 +82,7 @@ jobs:
 
   release-artifacts:
     name: Release artifact checks
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
@@ -102,7 +102,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [guard, fmt, clippy, test, release-artifacts]
     if: >
       github.event_name == 'push' ||
