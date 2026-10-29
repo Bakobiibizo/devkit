@@ -69,7 +69,10 @@ pub enum Command {
     #[command(hide = true)]
     Check,
     #[command(hide = true)]
-    Ci,
+    Ci {
+        #[command(subcommand)]
+        command: Option<CiCommand>,
+    },
     /// Run aggregations across all languages for a given verb.
     #[command(after_help = "Examples:\n  dev all check\n  dev all test")]
     All {
@@ -219,6 +222,37 @@ pub enum LanguageCommand {
         /// Language name to write as default_language.
         name: String,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum CiCommand {
+    /// Write .github/workflows/dev-ci.yml: `dev ci` on a self-hosted runner, then agentctl PR review.
+    #[command(
+        after_help = "The workflow runs the runner's global `dev`; no binary is vendored into the repository.\nThe review job runs `agentctl task pr-review` on the exact PR head after `dev ci` passes,\nfor non-draft pull requests from the same repository.\n\nExamples:\n  dev ci install\n  dev ci install --force\n  dev ci install --no-review\n  dev ci install --runs-on self-hosted,linux,x64 --branch main --branch release\n  dev ci install --review-agent codex"
+    )]
+    Install(CiInstallArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct CiInstallArgs {
+    /// Overwrite an existing dev-ci.yml.
+    #[arg(long = "force", default_value_t = false)]
+    pub force: bool,
+    /// Runner labels for both jobs, comma separated.
+    #[arg(long = "runs-on", default_value = "self-hosted,linux,arm64")]
+    pub runs_on: String,
+    /// Branch whose pushes run `dev ci`; repeat for several. Pull requests always run.
+    #[arg(long = "branch", default_values_t = vec!["main".to_string()])]
+    pub branches: Vec<String>,
+    /// Leave out the agentctl PR review job.
+    #[arg(long = "no-review", default_value_t = false)]
+    pub no_review: bool,
+    /// agentctl agent profile for the review; agentctl's default when omitted.
+    #[arg(long = "review-agent", conflicts_with = "no_review")]
+    pub review_agent: Option<String>,
+    /// Approval confidence threshold passed to agentctl (0-100); agentctl's default when omitted.
+    #[arg(long = "confidence-threshold", conflicts_with = "no_review", value_parser = clap::value_parser!(u8).range(0..=100))]
+    pub confidence_threshold: Option<u8>,
 }
 
 #[derive(Args, Debug)]

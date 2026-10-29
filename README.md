@@ -71,6 +71,10 @@ dev check
 dev ci
 dev all check
 
+# CI workflow: dev ci on a self-hosted runner, then agentctl PR review
+dev ci install
+dev ci install --no-review --runs-on self-hosted,linux,x64
+
 # Configuration and language scaffolding
 dev config show
 dev config reload
@@ -97,6 +101,8 @@ dev review --main --output review.md
 dev walk crates/dev -o manifest.md --extensions .rs .toml
 dev walk --stdout
 ```
+
+`dev ci install` writes `.github/workflows/dev-ci.yml`. The workflow calls the `dev` and `agentctl` already installed on the self-hosted runner, so nothing is vendored into the repository. Make its `dev ci` job a required status check: the review job may approve and enable auto-merge, and without a required check that approval is the only gate.
 
 `dev run <task>` streams the configured command directly. First-class verbs such as `dev test` capture noisy output and print a compact status summary.
 

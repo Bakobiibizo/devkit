@@ -1,3 +1,4 @@
+pub(crate) mod ci;
 pub(crate) mod config;
 pub(crate) mod env;
 pub(crate) mod git;

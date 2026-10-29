@@ -4,7 +4,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use camino::Utf8PathBuf;
 use clap::Parser;
 
-use crate::cli::{Cli, Command, LanguageCommand, Verb};
+use crate::cli::{CiCommand, Cli, Command, LanguageCommand, Verb};
 use crate::config::DevConfig;
 use crate::envfile;
 use crate::tasks::TaskIndex;
@@ -160,7 +160,10 @@ fn handle_with_state(state: &AppState, command: Command) -> Result<()> {
         Command::Test => commands::task::handle_verb(state, Verb::Test),
         Command::Fix => commands::task::handle_verb(state, Verb::Fix),
         Command::Check => commands::task::handle_verb(state, Verb::Check),
-        Command::Ci => commands::task::handle_verb(state, Verb::Ci),
+        Command::Ci { command: None } => commands::task::handle_verb(state, Verb::Ci),
+        Command::Ci {
+            command: Some(CiCommand::Install(args)),
+        } => commands::ci::handle_install(state, args),
         Command::All { verb } => commands::task::handle_all(state, verb),
         Command::Install(args) => commands::task::handle_install(state, args),
         Command::Language { command } => commands::language::handle(state, command),

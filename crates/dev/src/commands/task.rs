@@ -211,7 +211,11 @@ fn execute_commands(state: &AppState, task: &str, commands: &[CommandSpec]) -> R
     Ok(())
 }
 
-fn pipeline_for_language(config: &DevConfig, language: &str, verb: Verb) -> Option<Vec<String>> {
+pub(crate) fn pipeline_for_language(
+    config: &DevConfig,
+    language: &str,
+    verb: Verb,
+) -> Option<Vec<String>> {
     let languages = config.languages.as_ref()?;
     let lang = languages.get(language)?;
     let pipelines = lang.pipelines.as_ref()?;

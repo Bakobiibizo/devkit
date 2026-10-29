@@ -71,6 +71,7 @@ pub(crate) fn dynamic_help(args: &[std::ffi::OsString]) -> Result<Option<String>
 
     out.push_str("\nConfigured workflows\n");
     out.push_str("  verbs: dev fmt|lint|type|test|fix|check|ci\n");
+    out.push_str("  ci setup: dev ci install (self-hosted dev ci + agentctl PR review workflow)\n");
     if task_count > 0 {
         out.push_str(&format!(
             "  tasks: {task_count} configured (run `dev list` for names)\n"

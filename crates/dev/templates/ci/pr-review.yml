@@ -1,0 +1,18 @@
+
+  pr-review:
+    name: PR review
+    needs: [dev-ci]
+    runs-on: [{{RUNS_ON}}]
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: agentctl pr-review
+        run: agentctl task pr-review{{REVIEW_ARGS}} --json

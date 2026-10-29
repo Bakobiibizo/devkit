@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Added `dev ci install`, which writes `.github/workflows/dev-ci.yml`: a `dev ci` job on a self-hosted runner (default labels `self-hosted, linux, arm64`) that uses the runner's global `dev`, and a PR review job that runs `agentctl task pr-review` on the exact PR head after `dev ci` passes, for non-draft same-repository pull requests. No `dev` binary is vendored into the repository. Options: `--force`, `--runs-on`, `--branch`, `--no-review`, `--review-agent`, `--confidence-threshold`.
+
 ## 2026-06-12 - v0.4.0
 
 ### Added
