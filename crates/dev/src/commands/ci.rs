@@ -148,6 +148,7 @@ mod tests {
             2
         );
         assert!(workflow.contains("    branches: [main]\n"));
+        assert!(workflow.contains("types: [opened, synchronize, reopened, ready_for_review]"));
         assert!(workflow.contains("    needs: [dev-ci]\n"));
         assert!(workflow.contains("ref: ${{ github.event.pull_request.head.sha }}"));
         assert!(workflow.contains("        run: agentctl task pr-review --json\n"));

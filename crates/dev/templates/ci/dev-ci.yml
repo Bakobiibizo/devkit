@@ -6,6 +6,8 @@ on:
   push:
     branches: [{{BRANCHES}}]
   pull_request:
+    # ready_for_review: a draft marked ready is reviewed without needing a new commit.
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
