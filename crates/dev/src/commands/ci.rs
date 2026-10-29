@@ -152,6 +152,11 @@ mod tests {
         assert!(workflow.contains("    needs: [dev-ci]\n"));
         assert!(workflow.contains("ref: ${{ github.event.pull_request.head.sha }}"));
         assert!(workflow.contains("        run: agentctl task pr-review --json\n"));
+        assert_eq!(
+            workflow.matches("persist-credentials: false").count(),
+            2,
+            "neither job keeps the job token in git config"
+        );
         assert!(
             workflow.contains("github.event.pull_request.head.repo.full_name == github.repository")
         );

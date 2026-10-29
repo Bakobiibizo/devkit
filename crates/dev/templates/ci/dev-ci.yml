@@ -26,6 +26,11 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Keep the job token out of git config. Otherwise it overrides the runner's own
+          # GitHub credentials for every git call in the checkout, and that token cannot
+          # read other private repositories, such as git dependencies.
+          persist-credentials: false
       - name: Show tool versions
         run: |
           command -v dev
